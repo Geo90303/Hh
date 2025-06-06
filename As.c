@@ -1057,7 +1057,7 @@ void cncinput(int argc, unsigned char *argv[]) {
         } else {
         }
  
-}}
+}
 int initConnection()
 {
         unsigned char server[512];
