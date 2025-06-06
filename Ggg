@@ -26,6 +26,7 @@
 #define XOR_KEY "demonkey"
 #define IP4_HDRLEN 20
 #define ICMP_HDRLEN 8
+
 #include <uuid/uuid.h>
 #include <netinet/ip_icmp.h>
 #include <stdlib.h>
@@ -71,7 +72,12 @@ struct grehdr {
     uint16_t flags;
     uint16_t protocol;
 };
-
+struct udphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
+};
 
 char obf_uid[64];
 
