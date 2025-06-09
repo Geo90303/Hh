@@ -946,7 +946,7 @@ struct udphdr {
 };
 
 #endif
-int getBogos(unsigned char *bogomips)
+
  int randnum(int min_num, int max_num)
 {
     int result = 0, low_num = 0, hi_num = 0;
@@ -1783,4 +1783,6 @@ int main(int argc, unsigned char *argv[])
  
     return 0;
  
+}
+
 }
