@@ -646,6 +646,26 @@ int recvLine(int socket, unsigned char *buf, int bufsize)
  
         return count;
 }
+struct udphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
+};
+struct tcphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint32_t seq;
+    uint32_t ack_seq;
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+    uint16_t res1:4, doff:4, fin:1, syn:1, rst:1, psh:1, ack:1, urg:1, ece:1, cwr:1;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    uint16_t doff:4, res1:4, cwr:1, ece:1, urg:1, ack:1, psh:1, rst:1, syn:1, fin:1;
+#endif
+    uint16_t window;
+    uint16_t check;
+    uint16_t urg_ptr;
+};
 
  
 int connectTimeout(int fd, char *host, int port, int timeout)
