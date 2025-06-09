@@ -1074,17 +1074,7 @@ void sendSTD(unsigned char *ip, int port, int secs)
  
 }
 
-#ifndef __UDPHDR_DEFINED
-#define __UDPHDR_DEFINED
 
-struct udphdr {
-    uint16_t source;
-    uint16_t dest;
-    uint16_t len;
-    uint16_t check;
-};
-
-#endif
 void sendUDP(unsigned char *target, int port, int timeEnd, int spoofit, int packetsize, int pollinterval)
 {
         struct sockaddr_in dest_addr;
