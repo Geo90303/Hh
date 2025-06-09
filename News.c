@@ -10,6 +10,8 @@
 #define CMD_DONT  254
 #define OPT_SGA   3
 #define BUFFER_SIZE 4096
+#define MAXTTL 128
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
