@@ -935,17 +935,6 @@ int socket_connect(char *host, in_port_t port)
     return sock;
 }
 
-#ifndef __UDPHDR_DEFINED
-#define __UDPHDR_DEFINED
-
-struct udphdr {
-    uint16_t source;
-    uint16_t dest;
-    uint16_t len;
-    uint16_t check;
-};
-
-#endif
 
  int randnum(int min_num, int max_num)
 {
@@ -1084,6 +1073,18 @@ void sendSTD(unsigned char *ip, int port, int secs)
     
  
 }
+
+#ifndef __UDPHDR_DEFINED
+#define __UDPHDR_DEFINED
+
+struct udphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
+};
+
+#endif
 void sendUDP(unsigned char *target, int port, int timeEnd, int spoofit, int packetsize, int pollinterval)
 {
         struct sockaddr_in dest_addr;
@@ -1785,4 +1786,4 @@ int main(int argc, unsigned char *argv[])
  
 }
 
-}
+
