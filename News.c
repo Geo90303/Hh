@@ -817,7 +817,17 @@ unsigned short tcpcsum(struct iphdr *iph, struct tcphdr *tcph)
         free(tcp);
         return output;
 }
- 
+ #ifndef __UDPHDR_DEFINED
+#define __UDPHDR_DEFINED
+
+struct udphdr {
+    uint16_t source;
+    uint16_t dest;
+    uint16_t len;
+    uint16_t check;
+};
+
+#endif
 void makeIPPacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packetSize)
 {
         iph->ihl = 5;
@@ -839,6 +849,8 @@ int sclose(int fd)
         close(fd);
         return 0;
 }
+
+
  void sendTCP(unsigned char *target, int port, int timeEnd, int spoofit, int packetsize, int pollinterval)
 {
         register unsigned int pollRegister;
